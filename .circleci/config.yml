@@ -1,0 +1,130 @@
+version: 2.1
+
+commands:
+  smoke-test-common-steps:
+    steps:
+      - run:
+          name: Show version
+          command: ./cfspeed --version
+      - run:
+          name: Run a normal test
+          command: ./cfspeed
+
+jobs:
+  build:
+    docker:
+      - image: golang
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            apt update
+            apt install -y zip
+      - run:
+          name: Determine build name
+          command: |
+            mkdir -p dist
+            echo export BUILD_NAME=\"0.1.${CIRCLE_BUILD_NUM}-${CIRCLE_SHA1:0:7}\" | tee -a dist/BUILD_NAME
+      - run:
+          name: Build all
+          command: |
+            . dist/BUILD_NAME
+            ./build-and-pack-all.sh
+      - persist_to_workspace:
+          root: dist
+          paths:
+            - .
+      - store_artifacts:
+          path: dist
+          destination: /
+
+  go-test:
+    docker:
+      - image: golang
+    steps:
+      - checkout
+      - run: go vet .
+      - run: go test .
+
+  smoke-test-linux-amd64:
+    docker:
+      - image: archlinux
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Extract tarball
+          command: tar -xf cfspeed-*-linux-amd64.tar.gz
+      - smoke-test-common-steps
+
+  smoke-test-windows-amd64:
+    machine:
+      image: windows-server-2019-vs2019:stable
+    resource_class: windows.medium
+    shell: powershell.exe
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Extract zip
+          command: |
+            $ProgressPreference = "SilentlyContinue"
+            Expand-Archive cfspeed-*-windows-amd64.zip .
+      - smoke-test-common-steps
+
+  smoke-test-darwin-amd64:
+    macos:
+      xcode: 12.4.0
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Extract zip
+          command: unzip cfspeed-*-darwin-amd64.zip
+      - smoke-test-common-steps
+
+  release:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Install dependencies
+          command: |
+            tmpPath=$(mktemp)
+            curl -sSJL https://api.github.com/repos/cli/cli/releases/latest | grep -o 'https://github.com/cli/cli/releases/download/[^/]\{1,\}/gh_[^/]\{1,\}_linux_amd64.deb' | xargs curl -o $tmpPath -JL
+            sudo dpkg -i $tmpPath
+      - run:
+          name: Create a release
+          command: |
+            . BUILD_NAME
+            gh release create -R ${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME} -t "${BUILD_NAME}" -n "" "${BUILD_NAME}" *.tar.* *.zip
+
+workflows:
+  build-test-release:
+    jobs:
+      - build
+      - go-test
+      - smoke-test-linux-amd64:
+          requires:
+            - build
+      - smoke-test-windows-amd64:
+          requires:
+            - build
+      - smoke-test-darwin-amd64:
+          requires:
+            - build
+      - release:
+          requires:
+            - build
+            - go-test
+            - smoke-test-linux-amd64
+            - smoke-test-windows-amd64
+            - smoke-test-darwin-amd64
+          context:
+            - github
+          filters:
+            branches:
+              only: main
