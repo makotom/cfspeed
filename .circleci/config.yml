@@ -58,6 +58,18 @@ jobs:
           command: tar -xf cfspeed-*-linux-amd64.tar.gz
       - smoke-test-common-steps
 
+  smoke-test-linux-arm64:
+    machine:
+      image: ubuntu-2004:202101-01
+    resource_class: arm.medium
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Extract tarball
+          command: tar -xf cfspeed-*-linux-arm64.tar.gz
+      - smoke-test-common-steps
+
   smoke-test-windows-amd64:
     machine:
       image: windows-server-2019-vs2019:stable
@@ -110,6 +122,9 @@ workflows:
       - smoke-test-linux-amd64:
           requires:
             - build
+      - smoke-test-linux-arm64:
+          requires:
+            - build
       - smoke-test-windows-amd64:
           requires:
             - build
@@ -121,6 +136,7 @@ workflows:
             - build
             - go-test
             - smoke-test-linux-amd64
+            - smoke-test-linux-arm64
             - smoke-test-windows-amd64
             - smoke-test-darwin-amd64
           context:
