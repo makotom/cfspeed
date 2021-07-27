@@ -13,7 +13,7 @@ commands:
 jobs:
   build:
     docker:
-      - image: golang
+      - image: golang:1.17-rc
     steps:
       - checkout
       - run:
