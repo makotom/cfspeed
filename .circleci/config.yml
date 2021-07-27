@@ -2,7 +2,60 @@ version: 2.1
 
 commands:
   smoke-test-common-steps:
+    parameters:
+      goos:
+        type: string
+      goarch:
+        type: string
     steps:
+      - attach_workspace:
+          at: .
+      - when:
+          condition:
+            or:
+              - equal:
+                  - << parameters.goos >>
+                  - linux
+              - equal:
+                  - << parameters.goos >>
+                  - android
+          steps:
+            - run:
+                name: Extract tarball
+                command: |
+                  . BUILD_NAME
+                  tar -xf cfspeed-${BUILD_NAME}-<< parameters.goos >>-<< parameters.goarch >>.tar.gz
+      - when:
+          condition:
+            equal:
+              - << parameters.goos >>
+              - windows
+          steps:
+            - run:
+                name: Extract zip
+                command: |
+                  $ProgressPreference = "SilentlyContinue"
+
+                  $BuildName = $(& bash -c '. BUILD_NAME; echo $BUILD_NAME')
+                  Expand-Archive cfspeed-${BuildName}-<< parameters.goos >>-<< parameters.goarch >>.zip .
+      - unless:
+          condition:
+            or:
+              - equal:
+                  - << parameters.goos >>
+                  - linux
+              - equal:
+                  - << parameters.goos >>
+                  - android
+              - equal:
+                  - << parameters.goos >>
+                  - windows
+          steps:
+            - run:
+                name: Extract zip
+                command: |
+                  . BUILD_NAME
+                  unzip cfspeed-${BUILD_NAME}-<< parameters.goos >>-<< parameters.goarch >>.zip
       - run:
           name: Show version
           command: ./cfspeed --version
@@ -11,9 +64,27 @@ commands:
           command: ./cfspeed
 
 jobs:
+  determine-build-name:
+    docker:
+      - image: debian:buster-slim
+    steps:
+      - run:
+          name: Determine build name
+          command: |
+            echo export BUILD_NAME=\"0.1.${CIRCLE_BUILD_NUM}-${CIRCLE_SHA1:0:7}\" | tee -a BUILD_NAME
+      - persist_to_workspace:
+          root: .
+          paths:
+            - BUILD_NAME
+
   build:
     docker:
-      - image: golang
+      - image: golang:1.17-rc
+    parameters:
+      goos:
+        type: string
+      goarch:
+        type: string
     steps:
       - checkout
       - run:
@@ -21,20 +92,19 @@ jobs:
           command: |
             apt update
             apt install -y zip
+      - attach_workspace:
+          at: dist
       - run:
-          name: Determine build name
-          command: |
-            mkdir -p dist
-            echo export BUILD_NAME=\"0.1.${CIRCLE_BUILD_NUM}-${CIRCLE_SHA1:0:7}\" | tee -a dist/BUILD_NAME
-      - run:
-          name: Build all
+          name: Build
           command: |
             . dist/BUILD_NAME
-            ./build-and-pack-all.sh
+            GOOS_LIST_OVERRIDE='("<< parameters.goos >>")' GOARCH_LIST_OVERRIDE='("<< parameters.goarch >>")' ./build-and-pack-all.sh
       - persist_to_workspace:
           root: dist
           paths:
-            - .
+            - << parameters.goos >>/<< parameters.goarch >>
+            - "*.tar.gz"
+            - "*.zip"
       - store_artifacts:
           path: dist
           destination: /
@@ -51,24 +121,18 @@ jobs:
     docker:
       - image: archlinux
     steps:
-      - attach_workspace:
-          at: .
-      - run:
-          name: Extract tarball
-          command: tar -xf cfspeed-*-linux-amd64.tar.gz
-      - smoke-test-common-steps
+      - smoke-test-common-steps:
+          goos: linux
+          goarch: amd64
 
   smoke-test-linux-arm64:
     machine:
       image: ubuntu-2004:202101-01
     resource_class: arm.medium
     steps:
-      - attach_workspace:
-          at: .
-      - run:
-          name: Extract tarball
-          command: tar -xf cfspeed-*-linux-arm64.tar.gz
-      - smoke-test-common-steps
+      - smoke-test-common-steps:
+          goos: linux
+          goarch: arm64
 
   smoke-test-windows-amd64:
     machine:
@@ -76,25 +140,17 @@ jobs:
     resource_class: windows.medium
     shell: powershell.exe
     steps:
-      - attach_workspace:
-          at: .
-      - run:
-          name: Extract zip
-          command: |
-            $ProgressPreference = "SilentlyContinue"
-            Expand-Archive cfspeed-*-windows-amd64.zip .
-      - smoke-test-common-steps
+      - smoke-test-common-steps:
+          goos: windows
+          goarch: amd64
 
   smoke-test-darwin-amd64:
     macos:
       xcode: 12.4.0
     steps:
-      - attach_workspace:
-          at: .
-      - run:
-          name: Extract zip
-          command: unzip cfspeed-*-darwin-amd64.zip
-      - smoke-test-common-steps
+      - smoke-test-common-steps:
+          goos: darwin
+          goarch: amd64
 
   release:
     docker:
@@ -112,25 +168,39 @@ jobs:
           name: Create a release
           command: |
             . BUILD_NAME
-            gh release create -R ${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME} -t "${BUILD_NAME}" -n "" "${BUILD_NAME}" *.tar.* *.zip
+            gh release create -R ${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME} -t "${BUILD_NAME}" -n "" "${BUILD_NAME}" *.tar.gz *.zip
 
 workflows:
   build-test-release:
     jobs:
-      - build
+      - determine-build-name
+      - build:
+          name: build-<< matrix.goos >>-<< matrix.goarch >>
+          matrix:
+            parameters:
+              goos:
+                - linux
+                - windows
+                - darwin
+                - android
+              goarch:
+                - amd64
+                - arm64
+          requires:
+            - determine-build-name
       - go-test
       - smoke-test-linux-amd64:
           requires:
-            - build
+            - build-linux-amd64
       - smoke-test-linux-arm64:
           requires:
-            - build
+            - build-linux-arm64
       - smoke-test-windows-amd64:
           requires:
-            - build
+            - build-windows-amd64
       - smoke-test-darwin-amd64:
           requires:
-            - build
+            - build-darwin-amd64
       - release:
           requires:
             - build
