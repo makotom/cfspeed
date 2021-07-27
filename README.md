@@ -16,12 +16,14 @@ go build -ldflags "-X main.BuildName=dev -X main.BuildAnnotation=$(date --iso-86
 
 Note that the shell script needs Zip, tar and gzip.
 
+## Notes
+
+- On Debian/Ubuntu, you will need to install `ca-certificates`. Otherwise errors regarding TLS would be raised.
+
 ## TODO
 
 - Go tests
 - Smoke tests for AArch64 environments
-- Support for Windows on AArch64 (along with Go 1.17)
-- Research on TLS certificate issues with Debian-based Linux distros (and write an advisory)
 
 ## Dear Cloudflare
 
