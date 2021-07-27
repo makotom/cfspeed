@@ -7,6 +7,15 @@ GOARCH_LIST=("amd64" "arm64")
 BUILD_NAME=${BUILD_NAME:-"git"}
 BUILD_ANNOTATION="$(date --iso-8601=seconds)"
 
+if [ "${GOOS_LIST_OVERRIDE:-}" ]
+then
+    eval GOOS_LIST="${GOOS_LIST_OVERRIDE}"
+fi
+if [ "${GOARCH_LIST_OVERRIDE:-}" ]
+then
+    eval GOARCH_LIST="${GOARCH_LIST_OVERRIDE}"
+fi
+
 build_gc() {
     goos=$1
     goarch=$2
