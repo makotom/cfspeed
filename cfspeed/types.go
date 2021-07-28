@@ -1,6 +1,9 @@
 package cfspeed
 
-import "time"
+import (
+	"net/http"
+	"time"
+)
 
 type MeasurementMetadata struct {
 	srcIP      string
@@ -22,8 +25,9 @@ type RTTStats struct {
 }
 
 type SpeedMeasurement struct {
-	size     int64
-	duration time.Duration
+	size           int64
+	duration       time.Duration
+	httpRespHeader http.Header
 }
 
 type SpeedMeasurementStats struct {
