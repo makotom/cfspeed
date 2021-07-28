@@ -6,33 +6,32 @@ import (
 )
 
 type MeasurementMetadata struct {
-	srcIP      string
-	srcASN     string
-	srcCity    string
-	srcCountry string
-	dstColo    string
+	SrcIP      string
+	SrcASN     string
+	SrcCity    string
+	SrcCountry string
+	DstColo    string
 }
 
 type Stats struct {
-	mean   float64
-	stderr float64
-}
-
-type RTTStats struct {
-	nSamples int
-	mean     float64
-	stderr   float64
+	NSamples int
+	Mean     float64
+	StdErr   float64
+	Min      float64
+	Max      float64
 }
 
 type SpeedMeasurement struct {
-	size           int64
-	duration       time.Duration
-	httpRespHeader http.Header
+	Size           int64
+	Duration       time.Duration
+	HTTPRespHeader http.Header
 }
 
 type SpeedMeasurementStats struct {
-	nSamples int
-	txSize   int64
-	mean     float64
-	stderr   float64
+	NSamples int
+	TXSize   int64
+	Mean     float64
+	StdErr   float64
+	Min      float64
+	Max      float64
 }

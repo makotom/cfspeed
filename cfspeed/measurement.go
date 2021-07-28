@@ -57,15 +57,15 @@ func GetMeasurementMetadata() (*MeasurementMetadata, error) {
 	}
 
 	return &MeasurementMetadata{
-		srcIP:      resp.Header.Get("cf-meta-ip"),
-		srcASN:     resp.Header.Get("cf-meta-asn"),
-		srcCity:    srcCity,
-		srcCountry: srcCountry,
-		dstColo:    resp.Header.Get("cf-meta-colo"),
+		SrcIP:      resp.Header.Get("cf-meta-ip"),
+		SrcASN:     resp.Header.Get("cf-meta-asn"),
+		SrcCity:    srcCity,
+		SrcCountry: srcCountry,
+		DstColo:    resp.Header.Get("cf-meta-colo"),
 	}, nil
 }
 
-func MeasureRTT() (*RTTStats, error) {
+func MeasureRTT() (*Stats, error) {
 	durations := []time.Duration{}
 
 	for start := time.Now(); time.Since(start) < rttMeasurementSoftTimeout; {
@@ -75,21 +75,15 @@ func MeasureRTT() (*RTTStats, error) {
 		}
 
 		cfReqDur := time.Duration(0)
-		cfReqDurMatch := regexp.MustCompile(`cfRequestDuration;dur=([\d.]+)`).FindStringSubmatch(measurement.httpRespHeader.Get("Server-Timing"))
+		cfReqDurMatch := regexp.MustCompile(`cfRequestDuration;dur=([\d.]+)`).FindStringSubmatch(measurement.HTTPRespHeader.Get("Server-Timing"))
 		if len(cfReqDurMatch) > 0 {
 			cfReqDur, _ = time.ParseDuration(fmt.Sprintf("%sms", cfReqDurMatch[1]))
 		}
 
-		durations = append(durations, measurement.duration-cfReqDur)
+		durations = append(durations, measurement.Duration-cfReqDur)
 	}
 
-	durationStats := getDurationStats(&durations)
-
-	return &RTTStats{
-		nSamples: len(durations),
-		mean:     durationStats.mean,
-		stderr:   durationStats.stderr,
-	}, nil
+	return getDurationStats(&durations), nil
 }
 
 func MeasureDownlink(size int64) (*SpeedMeasurement, error) {
@@ -109,9 +103,9 @@ func MeasureDownlink(size int64) (*SpeedMeasurement, error) {
 	end := time.Now()
 
 	return &SpeedMeasurement{
-		size:           downloadedSize,
-		duration:       end.Sub(start),
-		httpRespHeader: resp.Header,
+		Size:           downloadedSize,
+		Duration:       end.Sub(start),
+		HTTPRespHeader: resp.Header,
 	}, nil
 }
 
@@ -134,9 +128,9 @@ func MeasureUplink(size int64) (*SpeedMeasurement, error) {
 	}
 
 	return &SpeedMeasurement{
-		size:           size,
-		duration:       end.Sub(start),
-		httpRespHeader: resp.Header,
+		Size:           size,
+		Duration:       end.Sub(start),
+		HTTPRespHeader: resp.Header,
 	}, nil
 }
 
@@ -150,7 +144,7 @@ func MeasureSpeedAdaptive(measurementFunc func(size int64) (*SpeedMeasurement, e
 			return nil, err
 		}
 
-		if len(measurements) == 0 && measurement.duration < adaptiveMeasurementTimeThreshold && measurementBytes < adaptiveMeasurementBytesMax {
+		if len(measurements) == 0 && measurement.Duration < adaptiveMeasurementTimeThreshold && measurementBytes < adaptiveMeasurementBytesMax {
 			measurements = []*SpeedMeasurement{}
 			measurementBytes *= adaptiveMeasurementExpBase
 		} else {
@@ -161,9 +155,11 @@ func MeasureSpeedAdaptive(measurementFunc func(size int64) (*SpeedMeasurement, e
 	stats := getSpeedMeasurementStats(&measurements)
 
 	return &SpeedMeasurementStats{
-		nSamples: len(measurements),
-		txSize:   measurementBytes,
-		mean:     stats.mean,
-		stderr:   stats.stderr,
+		NSamples: stats.NSamples,
+		TXSize:   measurementBytes,
+		Mean:     stats.Mean,
+		StdErr:   stats.StdErr,
+		Min:      stats.Min,
+		Max:      stats.Max,
 	}, nil
 }

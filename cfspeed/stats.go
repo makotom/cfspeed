@@ -31,34 +31,46 @@ func getStdErrUsingMean(series *[]float64, mean float64) float64 {
 	return math.Sqrt(getSquareMean(series)-(mean*mean)) / math.Sqrt(float64(len(*series)))
 }
 
-func getDurationStats(durationSeries *[]time.Duration) *Stats {
-	durationsMSF64 := []float64{}
-
-	for _, duration := range *durationSeries {
-		durationsMSF64 = append(durationsMSF64, float64(duration.Milliseconds()))
+func getStats(series *[]float64) *Stats {
+	ret := &Stats{
+		Min: math.Inf(1),
+		Max: math.Inf(-1),
 	}
 
-	mean := getMean(&durationsMSF64)
-	stderr := getStdErrUsingMean(&durationsMSF64, mean)
-
-	return &Stats{
-		mean,
-		stderr,
+	for _, element := range *series {
+		if element < ret.Min {
+			ret.Min = element
+		}
+		if element > ret.Max {
+			ret.Max = element
+		}
 	}
+
+	ret.NSamples = len(*series)
+	ret.Mean = getMean(series)
+	ret.StdErr = getStdErrUsingMean(series, ret.Mean)
+
+	return ret
+}
+
+func getDurationStats(durations *[]time.Duration) *Stats {
+	durationSamples := []float64{}
+
+	for _, duration := range *durations {
+		durationMSF64 := float64(duration.Milliseconds())
+		durationSamples = append(durationSamples, durationMSF64)
+	}
+
+	return getStats(&durationSamples)
 }
 
 func getSpeedMeasurementStats(measurements *[]*SpeedMeasurement) *Stats {
-	speedSamplesMBPS := []float64{}
+	mbpsSamples := []float64{}
 
 	for _, measurement := range *measurements {
-		speedSamplesMBPS = append(speedSamplesMBPS, float64(8*measurement.size/1000/1000)/measurement.duration.Seconds())
+		mbps := float64(8*measurement.Size) / float64(measurement.Duration.Microseconds())
+		mbpsSamples = append(mbpsSamples, mbps)
 	}
 
-	mean := getMean(&speedSamplesMBPS)
-	stderr := getStdErrUsingMean(&speedSamplesMBPS, mean)
-
-	return &Stats{
-		mean,
-		stderr,
-	}
+	return getStats(&mbpsSamples)
 }
