@@ -6,12 +6,13 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"time"
 )
 
 const (
 	downURLTemplate = "https://speed.cloudflare.com/__down?bytes=%d"
-	upURLTemplate   = "https://speed.cloudflare.com/__up?bytes=%d"
+	upURLTemplate   = "https://speed.cloudflare.com/__up?bytes"
 
 	rttMeasurementSoftTimeout = 2 * time.Second // Test element starts unless exceeding this duration
 
@@ -72,7 +73,14 @@ func MeasureRTT() (*RTTStats, error) {
 		if err != nil {
 			return nil, err
 		}
-		durations = append(durations, measurement.duration)
+
+		cfReqDur := time.Duration(0)
+		cfReqDurMatch := regexp.MustCompile(`cfRequestDuration;dur=([\d.]+)`).FindStringSubmatch(measurement.httpRespHeader.Get("Server-Timing"))
+		if len(cfReqDurMatch) > 0 {
+			cfReqDur, _ = time.ParseDuration(fmt.Sprintf("%sms", cfReqDurMatch[1]))
+		}
+
+		durations = append(durations, measurement.duration-cfReqDur)
 	}
 
 	durationStats := getDurationStats(&durations)
@@ -101,13 +109,14 @@ func MeasureDownlink(size int64) (*SpeedMeasurement, error) {
 	end := time.Now()
 
 	return &SpeedMeasurement{
-		size:     downloadedSize,
-		duration: end.Sub(start),
+		size:           downloadedSize,
+		duration:       end.Sub(start),
+		httpRespHeader: resp.Header,
 	}, nil
 }
 
 func MeasureUplink(size int64) (*SpeedMeasurement, error) {
-	postURL := fmt.Sprintf(upURLTemplate, size)
+	postURL := upURLTemplate
 	postBodyReader := bytes.NewReader(make([]byte, size))
 
 	start := time.Now()
@@ -125,8 +134,9 @@ func MeasureUplink(size int64) (*SpeedMeasurement, error) {
 	}
 
 	return &SpeedMeasurement{
-		size:     size,
-		duration: end.Sub(start),
+		size:           size,
+		duration:       end.Sub(start),
+		httpRespHeader: resp.Header,
 	}, nil
 }
 
