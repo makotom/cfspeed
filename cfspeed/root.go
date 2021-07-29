@@ -51,7 +51,7 @@ func printAdaptiveSpeedMeasurement(label string, measurement *SpeedMeasurementSt
 func SetTransportProtocol(protocol string) {
 	// cf (1). https://go.googlesource.com/go/+/refs/tags/go1.16.6/src/net/http/transport.go#42
 	// cf (2). https://go.googlesource.com/go/+/refs/tags/go1.16.6/src/net/http/transport.go#130
-	http.DefaultClient.Transport = &http.Transport{
+	http.DefaultTransport = &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
 			return (&net.Dialer{
