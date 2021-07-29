@@ -100,7 +100,7 @@ func getDurationStats(durations *[]time.Duration) *Stats {
 	durationSamples := []float64{}
 
 	for _, duration := range *durations {
-		durationMSF64 := float64(duration.Milliseconds())
+		durationMSF64 := float64(duration.Microseconds()) / 1000
 		durationSamples = append(durationSamples, durationMSF64)
 	}
 
