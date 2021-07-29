@@ -1,10 +1,8 @@
 package cfspeed
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 	"time"
@@ -23,17 +21,19 @@ const (
 	adaptiveMeasurementCount         = 5
 )
 
-func flushHTTPResponse(resp *http.Response) (int64, error) {
-	flushedSize, err := io.Copy(ioutil.Discard, resp.Body)
+func flushHTTPResponse(resp *http.Response) (int64, *IOSampler, error) {
+	flusher := InitWriteSampler()
+
+	flushedSize, err := io.Copy(flusher, resp.Body)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
-	return flushedSize, nil
+	return flushedSize, &flusher.IOSampler, nil
 }
 
 func GetMeasurementMetadata() (*MeasurementMetadata, error) {
@@ -41,7 +41,7 @@ func GetMeasurementMetadata() (*MeasurementMetadata, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = flushHTTPResponse(resp)
+	_, _, err = flushHTTPResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func MeasureDownlink(size int64) (*SpeedMeasurement, error) {
 	if err != nil {
 		return nil, err
 	}
-	downloadedSize, err := flushHTTPResponse(resp)
+	downloadedSize, ioSampler, err := flushHTTPResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -105,13 +105,14 @@ func MeasureDownlink(size int64) (*SpeedMeasurement, error) {
 	return &SpeedMeasurement{
 		Size:           downloadedSize,
 		Duration:       end.Sub(start),
+		IOSampler:      *ioSampler,
 		HTTPRespHeader: resp.Header,
 	}, nil
 }
 
 func MeasureUplink(size int64) (*SpeedMeasurement, error) {
 	postURL := upURLTemplate
-	postBodyReader := bytes.NewReader(make([]byte, size))
+	postBodyReader := InitReadSampler(size)
 
 	start := time.Now()
 
@@ -122,7 +123,7 @@ func MeasureUplink(size int64) (*SpeedMeasurement, error) {
 
 	end := time.Now()
 
-	_, err = flushHTTPResponse(resp)
+	_, _, err = flushHTTPResponse(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -130,6 +131,7 @@ func MeasureUplink(size int64) (*SpeedMeasurement, error) {
 	return &SpeedMeasurement{
 		Size:           size,
 		Duration:       end.Sub(start),
+		IOSampler:      postBodyReader.IOSampler,
 		HTTPRespHeader: resp.Header,
 	}, nil
 }
@@ -157,6 +159,7 @@ func MeasureSpeedAdaptive(measurementFunc func(size int64) (*SpeedMeasurement, e
 	return &SpeedMeasurementStats{
 		NSamples: stats.NSamples,
 		TXSize:   measurementBytes,
+		NTX:      len(measurements),
 		Mean:     stats.Mean,
 		StdErr:   stats.StdErr,
 		Min:      stats.Min,
