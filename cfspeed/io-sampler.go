@@ -44,6 +44,7 @@ func (r *ReadSampler) Read(p []byte) (int, error) {
 	if r.ctr > r.cEOF {
 		size = int(size64 - (r.ctr - r.cEOF))
 		err = io.EOF
+		r.ctr = r.cEOF
 	}
 
 	r.IOSampler.CallEvents = append(r.IOSampler.CallEvents, IOEvent{
