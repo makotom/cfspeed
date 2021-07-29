@@ -80,7 +80,12 @@ func MeasureRTT() (*Stats, error) {
 			cfReqDur, _ = time.ParseDuration(fmt.Sprintf("%sms", cfReqDurMatch[1]))
 		}
 
-		durations = append(durations, measurement.Duration-cfReqDur)
+		adjustedDuration := measurement.Duration - cfReqDur
+		if adjustedDuration < 0 {
+			adjustedDuration = 0
+		}
+
+		durations = append(durations, adjustedDuration)
 	}
 
 	return getDurationStats(&durations), nil
