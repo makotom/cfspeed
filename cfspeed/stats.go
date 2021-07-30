@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	ioSamplingWindowWidthMin = 50 * time.Millisecond
-	ioSamplingWindowWidthMax = 250 * time.Millisecond
+	ioSamplingWindowWidthMin = 20 * time.Millisecond
+	ioSamplingWindowWidthMax = 50 * time.Millisecond
 )
 
 func getMean(series *[]float64) float64 {
@@ -107,12 +107,16 @@ func getDurationStats(durations *[]time.Duration) *Stats {
 	return getStats(&durationSamples)
 }
 
-func getSpeedMeasurementStats(measurements *[]*SpeedMeasurement) *Stats {
+func getSpeedMeasurementStats(measurements *[]*SpeedMeasurement) (float64, *Stats) {
 	mbpsSamples := []float64{}
+	sizeSum := int64(0)
+	durationSum := int64(0)
 
 	for _, measurement := range *measurements {
 		mbpsSamples = append(mbpsSamples, *analyseIOEvents(&measurement.IOSampler.CallEvents, measurement.IOSampler.RW)...)
+		sizeSum += measurement.Size
+		durationSum += measurement.Duration.Microseconds()
 	}
 
-	return getStats(&mbpsSamples)
+	return float64(8*sizeSum) / float64(durationSum), getStats(&mbpsSamples)
 }

@@ -159,7 +159,7 @@ func MeasureSpeedAdaptive(measurementFunc func(size int64) (*SpeedMeasurement, e
 		}
 	}
 
-	stats := getSpeedMeasurementStats(&measurements)
+	catSpeed, stats := getSpeedMeasurementStats(&measurements)
 
 	return &SpeedMeasurementStats{
 		NSamples: stats.NSamples,
@@ -169,5 +169,6 @@ func MeasureSpeedAdaptive(measurementFunc func(size int64) (*SpeedMeasurement, e
 		StdErr:   stats.StdErr,
 		Min:      stats.Min,
 		Max:      stats.Max,
+		CatSpeed: catSpeed,
 	}, nil
 }
