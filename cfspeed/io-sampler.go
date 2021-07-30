@@ -7,13 +7,13 @@ import (
 
 type IOEvent struct {
 	Timestamp time.Time
-	RW        string
+	Mode      string
 	Size      int
 }
 
 type IOSampler struct {
-	RW         string
-	CallEvents []IOEvent
+	Mode       string
+	CallEvents []*IOEvent
 }
 
 type ReadSampler struct {
@@ -26,8 +26,8 @@ type ReadSampler struct {
 func InitReadSampler(size int64) *ReadSampler {
 	r := &ReadSampler{}
 
-	r.IOSampler.RW = "read"
-	r.IOSampler.CallEvents = []IOEvent{}
+	r.IOSampler.Mode = "read"
+	r.IOSampler.CallEvents = []*IOEvent{}
 	r.ctr = 0
 	r.cEOF = size
 
@@ -47,8 +47,9 @@ func (r *ReadSampler) Read(p []byte) (int, error) {
 		r.ctr = r.cEOF
 	}
 
-	r.IOSampler.CallEvents = append(r.IOSampler.CallEvents, IOEvent{
+	r.IOSampler.CallEvents = append(r.IOSampler.CallEvents, &IOEvent{
 		Timestamp: time.Now(),
+		Mode:      "read",
 		Size:      size,
 	})
 
@@ -62,8 +63,8 @@ type WriteSampler struct {
 func InitWriteSampler() *WriteSampler {
 	w := &WriteSampler{}
 
-	w.IOSampler.RW = "write"
-	w.IOSampler.CallEvents = []IOEvent{}
+	w.IOSampler.Mode = "write"
+	w.IOSampler.CallEvents = []*IOEvent{}
 
 	return w
 }
@@ -71,9 +72,9 @@ func InitWriteSampler() *WriteSampler {
 func (w *WriteSampler) Write(p []byte) (int, error) {
 	size := len(p)
 
-	w.IOSampler.CallEvents = append(w.IOSampler.CallEvents, IOEvent{
+	w.IOSampler.CallEvents = append(w.IOSampler.CallEvents, &IOEvent{
 		Timestamp: time.Now(),
-		RW:        "write",
+		Mode:      "write",
 		Size:      size,
 	})
 
