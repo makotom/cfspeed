@@ -38,4 +38,5 @@ type SpeedMeasurementStats struct {
 	StdErr   float64
 	Min      float64
 	Max      float64
+	CatSpeed float64
 }

@@ -43,6 +43,7 @@ func printAdaptiveSpeedMeasurement(label string, measurement *SpeedMeasurementSt
 		fmt.Printf("%s-stderr: %.3f Mbps\n", label, measurement.StdErr)
 		fmt.Printf("%s-min: %.3f Mbps\n", label, measurement.Min)
 		fmt.Printf("%s-max: %.3f Mbps\n", label, measurement.Max)
+		fmt.Printf("%s-cat: %.3f Mbps\n", label, measurement.CatSpeed)
 		fmt.Printf("%s-tx: %.3f MiB\n", label, math.Round(float64(measurement.TXSize)/1024/1024))
 		fmt.Printf("%s-ntx: %d\n", label, measurement.NTX)
 		fmt.Printf("%s-n: %d\n", label, measurement.NSamples)

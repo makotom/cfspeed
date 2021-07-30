@@ -5,38 +5,35 @@ import (
 	"time"
 )
 
-const (
-	ioSamplingWindowWidthMin = 50 * time.Millisecond
-	ioSamplingWindowWidthMax = 250 * time.Millisecond
-)
+const ioSamplingWindowWidth = 100 * time.Millisecond
 
-func getMean(series *[]float64) float64 {
+func getMean(series []float64) float64 {
 	ret := float64(0)
-	nSamplesF64 := float64(len(*series))
+	nSamplesF64 := float64(len(series))
 
-	for _, element := range *series {
+	for _, element := range series {
 		ret += element / nSamplesF64
 	}
 
 	return ret
 }
 
-func getSquareMean(series *[]float64) float64 {
+func getSquareMean(series []float64) float64 {
 	ret := float64(0)
-	nSamplesF64 := float64(len(*series))
+	nSamplesF64 := float64(len(series))
 
-	for _, element := range *series {
+	for _, element := range series {
 		ret += element * element / nSamplesF64
 	}
 
 	return ret
 }
 
-func getStdErrUsingMean(series *[]float64, mean float64) float64 {
-	return math.Sqrt(getSquareMean(series)-(mean*mean)) / math.Sqrt(float64(len(*series)))
+func getStdErrUsingMean(series []float64, mean float64) float64 {
+	return math.Sqrt(getSquareMean(series)-(mean*mean)) / math.Sqrt(float64(len(series)))
 }
 
-func getStats(series *[]float64) *Stats {
+func getStats(series []float64) *Stats {
 	ret := &Stats{
 		Min:      math.Inf(1),
 		Max:      math.Inf(-1),
@@ -44,7 +41,7 @@ func getStats(series *[]float64) *Stats {
 		MaxIndex: 0,
 	}
 
-	for index, element := range *series {
+	for index, element := range series {
 		if element < ret.Min {
 			ret.Min = element
 			ret.MinIndex = index
@@ -55,64 +52,82 @@ func getStats(series *[]float64) *Stats {
 		}
 	}
 
-	ret.NSamples = len(*series)
+	ret.NSamples = len(series)
 	ret.Mean = getMean(series)
 	ret.StdErr = getStdErrUsingMean(series, ret.Mean)
 
 	return ret
 }
 
-func analyseIOEvents(ioEvents *[]IOEvent, ioRW string) *[]float64 {
+func getReversedIOEvents(ioEvents []*IOEvent) []*IOEvent {
+	ret := []*IOEvent{}
+	seriesLen := len(ioEvents)
+
+	for iter := 0; iter < seriesLen; iter += 1 {
+		ret = append(ret, ioEvents[seriesLen-1-iter])
+	}
+
+	return ret
+}
+
+func reverseF64InPlace(series []float64) {
+	seriesLen := len(series)
+	halfLen := seriesLen / 2
+
+	for iter := 0; iter < halfLen; iter += 1 {
+		series[iter], series[seriesLen-1-iter] = series[seriesLen-1-iter], series[iter]
+	}
+}
+
+func analyseIOEvents(ioEvents []*IOEvent, ioMode string) []float64 {
 	mbpsSamples := []float64{}
 
-	windowStart := (*ioEvents)[0].Timestamp
+	ioEventsReversed := getReversedIOEvents(ioEvents)
+
+	windowStart := ioEventsReversed[0].Timestamp
 	sizeSum := 0
-
-	for index, event := range *ioEvents {
-		if index == 0 {
-			continue
+	for index, event := range ioEventsReversed[1:] {
+		if ioMode == "read" {
+			sizeSum += event.Size
 		} else {
-			if ioRW == "read" {
-				sizeSum += (*ioEvents)[index-1].Size
-			} else {
-				sizeSum += event.Size
-			}
+			sizeSum += ioEventsReversed[index].Size
+		}
 
-			sinceStart := event.Timestamp.Sub(windowStart)
-			if sinceStart > ioSamplingWindowWidthMax {
-				mbpsSamples = append(mbpsSamples, float64(8*sizeSum)/float64(sinceStart.Microseconds()))
+		sinceStart := windowStart.Sub(event.Timestamp)
+		if sinceStart > ioSamplingWindowWidth {
+			mbpsSamples = append(mbpsSamples, float64(8*sizeSum)/float64(sinceStart.Microseconds()))
 
-				windowStart = event.Timestamp
-				sizeSum = 0
-			}
+			windowStart = event.Timestamp
+			sizeSum = 0
 		}
 	}
 
-	sinceStart := (*ioEvents)[len(*ioEvents)-1].Timestamp.Sub(windowStart)
-	if sinceStart > ioSamplingWindowWidthMin {
-		mbpsSamples = append(mbpsSamples, float64(8*sizeSum)/float64(sinceStart.Microseconds()))
-	}
+	reverseF64InPlace(mbpsSamples)
 
-	return &mbpsSamples
+	return mbpsSamples
 }
 
-func getDurationStats(durations *[]time.Duration) *Stats {
+func getDurationStats(durations []time.Duration) *Stats {
 	durationSamples := []float64{}
 
-	for _, duration := range *durations {
+	for _, duration := range durations {
 		durationMSF64 := float64(duration.Microseconds()) / 1000
 		durationSamples = append(durationSamples, durationMSF64)
 	}
 
-	return getStats(&durationSamples)
+	return getStats(durationSamples)
 }
 
-func getSpeedMeasurementStats(measurements *[]*SpeedMeasurement) *Stats {
+func getSpeedMeasurementStats(measurements []*SpeedMeasurement) (float64, *Stats) {
 	mbpsSamples := []float64{}
+	sizeSum := int64(0)
+	durationSum := int64(0)
 
-	for _, measurement := range *measurements {
-		mbpsSamples = append(mbpsSamples, *analyseIOEvents(&measurement.IOSampler.CallEvents, measurement.IOSampler.RW)...)
+	for _, measurement := range measurements {
+		mbpsSamples = append(mbpsSamples, analyseIOEvents(measurement.IOSampler.CallEvents, measurement.IOSampler.Mode)...)
+		sizeSum += measurement.Size
+		durationSum += measurement.Duration.Microseconds()
 	}
 
-	return getStats(&mbpsSamples)
+	return float64(8*sizeSum) / float64(durationSum), getStats(mbpsSamples)
 }
