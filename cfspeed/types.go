@@ -16,6 +16,7 @@ type MeasurementMetadata struct {
 type Stats struct {
 	NSamples int
 	Mean     float64
+	StdDev   float64
 	StdErr   float64
 	Min      float64
 	MinIndex int
@@ -25,6 +26,8 @@ type Stats struct {
 
 type SpeedMeasurement struct {
 	Size           int64
+	Start          time.Time
+	End            time.Time
 	Duration       time.Duration
 	IOSampler      IOSampler
 	HTTPRespHeader http.Header

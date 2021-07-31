@@ -75,14 +75,14 @@ func RunAndPrint(transportProtocol string) {
 	printMetadata(measurementMetadata, err)
 	fmt.Println()
 
-	measurementRTT, err := MeasureRTT()
-	printRTTMeasurement(measurementRTT, err)
+	rttStats, cfReqDurStats, err := MeasureRTT()
+	printRTTMeasurement(rttStats, err)
 	fmt.Println()
 
-	measurementDown, err := MeasureSpeedAdaptive(MeasureDownlink)
-	printAdaptiveSpeedMeasurement("Downlink", measurementDown, err)
+	downlinkStats, err := MeasureSpeedAdaptive("down", rttStats, cfReqDurStats)
+	printAdaptiveSpeedMeasurement("Downlink", downlinkStats, err)
 	fmt.Println()
 
-	measurementUp, err := MeasureSpeedAdaptive(MeasureUplink)
-	printAdaptiveSpeedMeasurement("Uplink", measurementUp, err)
+	uplinkStats, err := MeasureSpeedAdaptive("up", rttStats, cfReqDurStats)
+	printAdaptiveSpeedMeasurement("Uplink", uplinkStats, err)
 }
