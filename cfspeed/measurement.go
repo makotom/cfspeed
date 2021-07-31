@@ -36,6 +36,17 @@ func flushHTTPResponse(resp *http.Response) (int64, *IOSampler, error) {
 	return flushedSize, &flusher.IOSampler, nil
 }
 
+func getCFReqDur(httpRespHeader *http.Header) time.Duration {
+	cfReqDur := time.Duration(0)
+
+	cfReqDurMatch := regexp.MustCompile(`cfRequestDuration;dur=([\d.]+)`).FindStringSubmatch(httpRespHeader.Get("Server-Timing"))
+	if len(cfReqDurMatch) > 0 {
+		cfReqDur, _ = time.ParseDuration(fmt.Sprintf("%sms", cfReqDurMatch[1]))
+	}
+
+	return cfReqDur
+}
+
 func GetMeasurementMetadata() (*MeasurementMetadata, error) {
 	resp, err := http.Get(fmt.Sprintf(downURLTemplate, 0))
 	if err != nil {
@@ -65,20 +76,18 @@ func GetMeasurementMetadata() (*MeasurementMetadata, error) {
 	}, nil
 }
 
-func MeasureRTT() (*Stats, error) {
+func MeasureRTT() (*Stats, *Stats, error) {
 	durations := []time.Duration{}
+	cfReqDurs := []time.Duration{}
 
 	for start := time.Now(); time.Since(start) < rttMeasurementSoftTimeout; {
 		measurement, err := MeasureUplink(0)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		cfReqDur := time.Duration(0)
-		cfReqDurMatch := regexp.MustCompile(`cfRequestDuration;dur=([\d.]+)`).FindStringSubmatch(measurement.HTTPRespHeader.Get("Server-Timing"))
-		if len(cfReqDurMatch) > 0 {
-			cfReqDur, _ = time.ParseDuration(fmt.Sprintf("%sms", cfReqDurMatch[1]))
-		}
+		cfReqDur := getCFReqDur(&measurement.HTTPRespHeader)
+		cfReqDurs = append(cfReqDurs, cfReqDur)
 
 		adjustedDuration := measurement.Duration - cfReqDur
 		if adjustedDuration < 0 {
@@ -88,7 +97,7 @@ func MeasureRTT() (*Stats, error) {
 		durations = append(durations, adjustedDuration)
 	}
 
-	return getDurationStats(durations), nil
+	return getDurationStats(durations), getDurationStats(cfReqDurs), nil
 }
 
 func MeasureDownlink(size int64) (*SpeedMeasurement, error) {
@@ -109,6 +118,8 @@ func MeasureDownlink(size int64) (*SpeedMeasurement, error) {
 
 	return &SpeedMeasurement{
 		Size:           downloadedSize,
+		Start:          start,
+		End:            end,
 		Duration:       end.Sub(start),
 		IOSampler:      *ioSampler,
 		HTTPRespHeader: resp.Header,
@@ -135,15 +146,26 @@ func MeasureUplink(size int64) (*SpeedMeasurement, error) {
 
 	return &SpeedMeasurement{
 		Size:           size,
+		Start:          start,
+		End:            end,
 		Duration:       end.Sub(start),
 		IOSampler:      postBodyReader.IOSampler,
 		HTTPRespHeader: resp.Header,
 	}, nil
 }
 
-func MeasureSpeedAdaptive(measurementFunc func(size int64) (*SpeedMeasurement, error)) (*SpeedMeasurementStats, error) {
+func MeasureSpeedAdaptive(mode string, rttStats, cfReqDurStats *Stats) (*SpeedMeasurementStats, error) {
 	measurements := []*SpeedMeasurement{}
+	cfReqDurs := []time.Duration{}
 	measurementBytes := adaptiveMeasurementBytesMin
+
+	measurementFunc := func(size int64) (*SpeedMeasurement, error) { return nil, fmt.Errorf("unknown mode %q", mode) }
+	switch mode {
+	case "down":
+		measurementFunc = MeasureDownlink
+	case "up":
+		measurementFunc = MeasureUplink
+	}
 
 	for len(measurements) < adaptiveMeasurementCount {
 		measurement, err := measurementFunc(measurementBytes)
@@ -156,10 +178,15 @@ func MeasureSpeedAdaptive(measurementFunc func(size int64) (*SpeedMeasurement, e
 			measurementBytes *= adaptiveMeasurementExpBase
 		} else {
 			measurements = append(measurements, measurement)
+			cfReqDurs = append(cfReqDurs, getCFReqDur(&measurement.HTTPRespHeader))
 		}
 	}
 
-	catSpeed, stats := getSpeedMeasurementStats(measurements)
+	if mode == "down" {
+		cfReqDurStats = getDurationStats(cfReqDurs)
+	}
+
+	catSpeed, stats := getSpeedMeasurementStats(measurements, rttStats, cfReqDurStats)
 
 	return &SpeedMeasurementStats{
 		NSamples: stats.NSamples,

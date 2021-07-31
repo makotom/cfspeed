@@ -3,7 +3,6 @@ package cfspeed
 import (
 	"context"
 	"fmt"
-	"math"
 	"net"
 	"net/http"
 	"os"
@@ -44,7 +43,7 @@ func printAdaptiveSpeedMeasurement(label string, measurement *SpeedMeasurementSt
 		fmt.Printf("%s-min: %.3f Mbps\n", label, measurement.Min)
 		fmt.Printf("%s-max: %.3f Mbps\n", label, measurement.Max)
 		fmt.Printf("%s-cat: %.3f Mbps\n", label, measurement.CatSpeed)
-		fmt.Printf("%s-tx: %.3f MiB\n", label, math.Round(float64(measurement.TXSize)/1024/1024))
+		fmt.Printf("%s-tx: %.3f MiB\n", label, float64(measurement.TXSize)/1024/1024)
 		fmt.Printf("%s-ntx: %d\n", label, measurement.NTX)
 		fmt.Printf("%s-n: %d\n", label, measurement.NSamples)
 	}
@@ -76,14 +75,14 @@ func RunAndPrint(transportProtocol string) {
 	printMetadata(measurementMetadata, err)
 	fmt.Println()
 
-	measurementRTT, err := MeasureRTT()
-	printRTTMeasurement(measurementRTT, err)
+	rttStats, cfReqDurStats, err := MeasureRTT()
+	printRTTMeasurement(rttStats, err)
 	fmt.Println()
 
-	measurementDown, err := MeasureSpeedAdaptive(MeasureDownlink)
-	printAdaptiveSpeedMeasurement("Downlink", measurementDown, err)
+	downlinkStats, err := MeasureSpeedAdaptive("down", rttStats, cfReqDurStats)
+	printAdaptiveSpeedMeasurement("Downlink", downlinkStats, err)
 	fmt.Println()
 
-	measurementUp, err := MeasureSpeedAdaptive(MeasureUplink)
-	printAdaptiveSpeedMeasurement("Uplink", measurementUp, err)
+	uplinkStats, err := MeasureSpeedAdaptive("up", rttStats, cfReqDurStats)
+	printAdaptiveSpeedMeasurement("Uplink", uplinkStats, err)
 }
