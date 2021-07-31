@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const nIOEventsMin = 4
+
 type IOEvent struct {
 	Timestamp time.Time
 	Mode      string
@@ -36,12 +38,17 @@ func InitReadSampler(size int64) *ReadSampler {
 
 func (r *ReadSampler) Read(p []byte) (int, error) {
 	var err error = nil
+
 	size := len(p)
 	size64 := int64(size)
+	if size64 > r.cEOF/nIOEventsMin {
+		size64 = r.cEOF / nIOEventsMin
+		size = int(size64)
+	}
 
 	r.ctr += size64
 
-	if r.ctr > r.cEOF {
+	if r.ctr >= r.cEOF {
 		size = int(size64 - (r.ctr - r.cEOF))
 		err = io.EOF
 		r.ctr = r.cEOF
