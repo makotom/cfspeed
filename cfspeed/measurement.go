@@ -10,7 +10,7 @@ import (
 
 const (
 	downURLTemplate = "https://speed.cloudflare.com/__down?bytes=%d"
-	upURLTemplate   = "https://speed.cloudflare.com/__up?bytes"
+	upURLTemplate   = "https://speed.cloudflare.com/__up"
 
 	rttMeasurementSoftTimeout = 2 * time.Second // Test element starts unless exceeding this duration
 
