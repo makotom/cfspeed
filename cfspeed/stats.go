@@ -71,7 +71,7 @@ func getReversedIOEvents(ioEvents []*IOEvent) []*IOEvent {
 	return ret
 }
 
-func reverseF64InPlace(series []float64) {
+func reverseF64sInPlace(series []float64) {
 	seriesLen := len(series)
 	halfLen := seriesLen / 2
 
@@ -137,7 +137,7 @@ func analyseIOWriteEvents(start, _ time.Time, rtt, cfReqDur time.Duration, ioEve
 		}
 	}
 
-	reverseF64InPlace(mbpsSamples)
+	reverseF64sInPlace(mbpsSamples)
 
 	return mbpsSamples
 }
