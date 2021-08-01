@@ -80,8 +80,21 @@ func reverseF64sInPlace(series []float64) {
 	}
 }
 
-func analyseIOReadEvents(_, end time.Time, rtt, cfReqDur time.Duration, ioEvents []*IOEvent) []float64 {
+func getIOLatencyStats(ioEvents []*IOEvent) *Stats {
+	latencies := []time.Duration{}
+
+	for index, event := range ioEvents[1:] {
+		latencies = append(latencies, event.Timestamp.Sub(ioEvents[index].Timestamp))
+	}
+
+	return getDurationStats(latencies)
+}
+
+func analyseIOReadEvents(_, end time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []float64 {
 	mbpsSamples := []float64{}
+
+	ioLatencyStats := getIOLatencyStats(ioEvents)
+	samplingBoundaryLatencyThreshold := ioLatencyStats.Mean + 2*ioLatencyStats.StdDev
 
 	ioEventsToAnalyse := ioEvents
 	adjustedEndTime := end.Add(-cfReqDur)
@@ -99,7 +112,7 @@ func analyseIOReadEvents(_, end time.Time, rtt, cfReqDur time.Duration, ioEvents
 		sizeSum += ioEventsToAnalyse[index].Size
 
 		sinceStart := event.Timestamp.Sub(windowStart)
-		if event.Timestamp.Sub(ioEventsToAnalyse[index].Timestamp) > rtt && sinceStart > ioSamplingWindowWidthMin {
+		if float64(event.Timestamp.Sub(ioEventsToAnalyse[index].Timestamp).Milliseconds()) > samplingBoundaryLatencyThreshold && sinceStart > ioSamplingWindowWidthMin {
 			mbpsSamples = append(mbpsSamples, float64(8*sizeSum)/float64(sinceStart.Microseconds()))
 
 			windowStart = event.Timestamp
@@ -110,8 +123,11 @@ func analyseIOReadEvents(_, end time.Time, rtt, cfReqDur time.Duration, ioEvents
 	return mbpsSamples
 }
 
-func analyseIOWriteEvents(start, _ time.Time, rtt, cfReqDur time.Duration, ioEvents []*IOEvent) []float64 {
+func analyseIOWriteEvents(start, _ time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []float64 {
 	mbpsSamples := []float64{}
+
+	ioLatencyStats := getIOLatencyStats(ioEvents)
+	samplingBoundaryLatencyThreshold := ioLatencyStats.Mean + 2*ioLatencyStats.StdDev
 
 	ioEventsToAnalyse := getReversedIOEvents(ioEvents)
 	adjustedStartTime := start.Add(cfReqDur)
@@ -129,7 +145,7 @@ func analyseIOWriteEvents(start, _ time.Time, rtt, cfReqDur time.Duration, ioEve
 		sizeSum += ioEventsToAnalyse[index].Size
 
 		sinceStart := windowStart.Sub(event.Timestamp)
-		if ioEventsToAnalyse[index].Timestamp.Sub(event.Timestamp) > rtt && sinceStart > ioSamplingWindowWidthMin {
+		if float64(ioEventsToAnalyse[index].Timestamp.Sub(event.Timestamp).Milliseconds()) > samplingBoundaryLatencyThreshold && sinceStart > ioSamplingWindowWidthMin {
 			mbpsSamples = append(mbpsSamples, float64(8*sizeSum)/float64(sinceStart.Microseconds()))
 
 			windowStart = event.Timestamp
@@ -142,15 +158,14 @@ func analyseIOWriteEvents(start, _ time.Time, rtt, cfReqDur time.Duration, ioEve
 	return mbpsSamples
 }
 
-func analyseIOEvents(ioMode string, start, end time.Time, rttStats, cfReqDurStats *Stats, ioEvents []*IOEvent) []float64 {
-	rttRep := time.Duration((rttStats.Mean - rttStats.StdDev) * 1000 * 1000)
+func analyseIOEvents(ioMode string, start, end time.Time, cfReqDurStats *Stats, ioEvents []*IOEvent) []float64 {
 	cfReqDur := time.Duration(cfReqDurStats.Mean * 1000 * 1000)
 
 	switch ioMode {
 	case "read":
-		return analyseIOReadEvents(start, end, rttRep, cfReqDur, ioEvents)
+		return analyseIOReadEvents(start, end, cfReqDur, ioEvents)
 	case "write":
-		return analyseIOWriteEvents(start, end, rttRep, cfReqDur, ioEvents)
+		return analyseIOWriteEvents(start, end, cfReqDur, ioEvents)
 	default:
 		return []float64{}
 	}
@@ -160,20 +175,20 @@ func getDurationStats(durations []time.Duration) *Stats {
 	durationSamples := []float64{}
 
 	for _, duration := range durations {
-		durationMSF64 := float64(duration.Microseconds()) / 1000
+		durationMSF64 := float64(duration.Nanoseconds()) / 1000 / 1000
 		durationSamples = append(durationSamples, durationMSF64)
 	}
 
 	return getStats(durationSamples)
 }
 
-func getSpeedMeasurementStats(measurements []*SpeedMeasurement, rttStats, cfReqDurStats *Stats) (float64, *Stats) {
+func getSpeedMeasurementStats(measurements []*SpeedMeasurement, cfReqDurStats *Stats) (float64, *Stats) {
 	mbpsSamples := []float64{}
 	sizeSum := int64(0)
 	durationSum := int64(0)
 
 	for _, measurement := range measurements {
-		mbpsSamples = append(mbpsSamples, analyseIOEvents(measurement.IOSampler.Mode, measurement.Start, measurement.End, rttStats, cfReqDurStats, measurement.IOSampler.CallEvents)...)
+		mbpsSamples = append(mbpsSamples, analyseIOEvents(measurement.IOSampler.Mode, measurement.Start, measurement.End, cfReqDurStats, measurement.IOSampler.CallEvents)...)
 		sizeSum += measurement.Size
 		durationSum += measurement.Duration.Microseconds()
 	}

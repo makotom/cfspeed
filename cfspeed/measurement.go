@@ -154,7 +154,7 @@ func MeasureUplink(size int64) (*SpeedMeasurement, error) {
 	}, nil
 }
 
-func MeasureSpeedAdaptive(mode string, rttStats, cfReqDurStats *Stats) (*SpeedMeasurementStats, error) {
+func MeasureSpeedAdaptive(mode string, cfReqDurStats *Stats) (*SpeedMeasurementStats, error) {
 	measurements := []*SpeedMeasurement{}
 	cfReqDurs := []time.Duration{}
 	measurementBytes := adaptiveMeasurementBytesMin
@@ -187,7 +187,7 @@ func MeasureSpeedAdaptive(mode string, rttStats, cfReqDurStats *Stats) (*SpeedMe
 		cfReqDurStats = getDurationStats(cfReqDurs)
 	}
 
-	catSpeed, stats := getSpeedMeasurementStats(measurements, rttStats, cfReqDurStats)
+	catSpeed, stats := getSpeedMeasurementStats(measurements, cfReqDurStats)
 
 	return &SpeedMeasurementStats{
 		NSamples: stats.NSamples,
