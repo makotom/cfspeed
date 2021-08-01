@@ -79,10 +79,10 @@ func RunAndPrint(transportProtocol string) {
 	printRTTMeasurement(rttStats, err)
 	fmt.Println()
 
-	downlinkStats, err := MeasureSpeedAdaptive("down", rttStats, cfReqDurStats)
+	downlinkStats, err := MeasureSpeedAdaptive("down", cfReqDurStats)
 	printAdaptiveSpeedMeasurement("Downlink", downlinkStats, err)
 	fmt.Println()
 
-	uplinkStats, err := MeasureSpeedAdaptive("up", rttStats, cfReqDurStats)
+	uplinkStats, err := MeasureSpeedAdaptive("up", cfReqDurStats)
 	printAdaptiveSpeedMeasurement("Uplink", uplinkStats, err)
 }

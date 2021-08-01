@@ -10,13 +10,13 @@ import (
 
 const (
 	downURLTemplate = "https://speed.cloudflare.com/__down?bytes=%d"
-	upURLTemplate   = "https://speed.cloudflare.com/__up?bytes"
+	upURLTemplate   = "https://speed.cloudflare.com/__up"
 
 	rttMeasurementSoftTimeout = 2 * time.Second // Test element starts unless exceeding this duration
 
 	adaptiveMeasurementBytesMin      = int64(64 * 1024)         // 64 KiB
-	adaptiveMeasurementBytesMax      = int64(256 * 1024 * 1024) // 256 MiB
-	adaptiveMeasurementExpBase       = 2                        // 64 k, 128 k, 256 k, 512 k, 1 M, 2 M, 4 M, 8 M, 16 M, 32 M, 64 M, 128 M, 256 M
+	adaptiveMeasurementBytesMax      = int64(512 * 1024 * 1024) // 512 MiB
+	adaptiveMeasurementExpBase       = 2                        // 64 k, 128 k, 256 k, 512 k, 1 M, 2 M, 4 M, 8 M, 16 M, 32 M, 64 M, 128 M, 256 M, 512 M
 	adaptiveMeasurementTimeThreshold = 2 * time.Second
 	adaptiveMeasurementCount         = 5
 )
@@ -154,7 +154,7 @@ func MeasureUplink(size int64) (*SpeedMeasurement, error) {
 	}, nil
 }
 
-func MeasureSpeedAdaptive(mode string, rttStats, cfReqDurStats *Stats) (*SpeedMeasurementStats, error) {
+func MeasureSpeedAdaptive(mode string, cfReqDurStats *Stats) (*SpeedMeasurementStats, error) {
 	measurements := []*SpeedMeasurement{}
 	cfReqDurs := []time.Duration{}
 	measurementBytes := adaptiveMeasurementBytesMin
@@ -173,12 +173,13 @@ func MeasureSpeedAdaptive(mode string, rttStats, cfReqDurStats *Stats) (*SpeedMe
 			return nil, err
 		}
 
-		if len(measurements) == 0 && measurement.Duration < adaptiveMeasurementTimeThreshold && measurementBytes < adaptiveMeasurementBytesMax {
+		if len(measurements) == 0 && measurement.Duration < adaptiveMeasurementTimeThreshold && measurementBytes < adaptiveMeasurementBytesMax && measurementBytes == measurement.Size {
 			measurements = []*SpeedMeasurement{}
 			measurementBytes *= adaptiveMeasurementExpBase
 		} else {
 			measurements = append(measurements, measurement)
 			cfReqDurs = append(cfReqDurs, getCFReqDur(&measurement.HTTPRespHeader))
+			measurementBytes = measurement.Size
 		}
 	}
 
@@ -186,7 +187,7 @@ func MeasureSpeedAdaptive(mode string, rttStats, cfReqDurStats *Stats) (*SpeedMe
 		cfReqDurStats = getDurationStats(cfReqDurs)
 	}
 
-	catSpeed, stats := getSpeedMeasurementStats(measurements, rttStats, cfReqDurStats)
+	catSpeed, stats := getSpeedMeasurementStats(measurements, cfReqDurStats)
 
 	return &SpeedMeasurementStats{
 		NSamples: stats.NSamples,
