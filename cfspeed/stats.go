@@ -99,7 +99,7 @@ func analyseIOReadEvents(_, end time.Time, rtt, cfReqDur time.Duration, ioEvents
 		sizeSum += ioEventsToAnalyse[index].Size
 
 		sinceStart := event.Timestamp.Sub(windowStart)
-		if event.Timestamp.Sub(windowStart) > rtt && sinceStart > ioSamplingWindowWidthMin {
+		if event.Timestamp.Sub(ioEventsToAnalyse[index].Timestamp) > rtt && sinceStart > ioSamplingWindowWidthMin {
 			mbpsSamples = append(mbpsSamples, float64(8*sizeSum)/float64(sinceStart.Microseconds()))
 
 			windowStart = event.Timestamp
