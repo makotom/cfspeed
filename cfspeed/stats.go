@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const ioSamplingWindowWidthMin = 100 * time.Millisecond
+const ioSamplingWindowWidthMin = 200 * time.Millisecond
 
 func getMean(series []float64) float64 {
 	ret := float64(0)
