@@ -20,7 +20,7 @@ build_gc() {
     goos=$1
     goarch=$2
 
-    GOOS="${goos}" GOARCH="${goarch}" go build -ldflags "-X main.BuildName=${BUILD_NAME} -X main.BuildAnnotation=${BUILD_ANNOTATION}" -o "dist/${goos}/${goarch}/cfspeed" .
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build -ldflags "-X main.BuildName=${BUILD_NAME} -X main.BuildAnnotation=${BUILD_ANNOTATION}" -o "dist/${goos}/${goarch}/cfspeed" .
 
     if [ "${goos}" == "windows" ]
     then
