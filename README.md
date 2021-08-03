@@ -2,19 +2,21 @@
 
 Unofficial CLI-based implementation of [Cloudflare's Speed Test](https://speed.cloudflare.com/)
 
-## Build
+## Quick start
+
+See https://github.com/makotom/cfspeed/releases for prebuilt binaries.
+
+## Build it for yourself
+
+E.g. if you are to build an executable for Linux on x86-64 (AMD64), you would run:
 
 ```
-go build -ldflags "-X main.BuildName=dev -X main.BuildAnnotation=$(date --iso-8601=seconds)" -o dist .
+GOOS_LIST_OVERRIDE=("linux") GOARCH_LIST_OVERRIDE=("amd64") ./build-and-pack-all.sh
 ```
 
-### Cross compiling
+Refer to [the official Go documentation](https://golang.org/doc/install/source#environment) for valid combinations of `GOOS` and `GOARCH`.
 
-```
-./build-and-pack-all.sh
-```
-
-Note that the shell script needs Zip, tar and gzip.
+Note that the shell script depends on Zip, tar and gzip for packaging.
 
 ## Notes
 
