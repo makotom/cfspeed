@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -22,6 +23,8 @@ type CmdOpts struct {
 
 func parseFlags() CmdOpts {
 	ret := CmdOpts{}
+
+	pflag.ErrHelp = errors.New("")
 
 	pflag.BoolVarP(&ret.testIP4, "ip4", "4", false, "Ensure measurements over IPv4")
 	pflag.BoolVarP(&ret.testIP6, "ip6", "6", false, "Ensure measurements over IPv6")
