@@ -2,50 +2,49 @@ package cfspeed
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"time"
 )
 
-func printMetadata(metadata *MeasurementMetadata, err error) {
+var logger = log.New(os.Stderr, "", 0)
+
+func printMetadata(printer *log.Logger, metadata *MeasurementMetadata, err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error while fetching metadata: %v\n", err)
-		os.Exit(1)
+		logger.Printf("Error while fetching metadata: %v\n", err)
 	} else if metadata != nil {
-		fmt.Printf("SrcIP: %s (AS%s)\n", metadata.SrcIP, metadata.SrcASN)
-		fmt.Printf("SrcLocation: %s, %s\n", metadata.SrcCity, metadata.SrcCountry)
-		fmt.Printf("DstColocation: %s\n", metadata.DstColo)
+		printer.Printf("SrcIP: %s (AS%s)\n", metadata.SrcIP, metadata.SrcASN)
+		printer.Printf("SrcLocation: %s, %s\n", metadata.SrcCity, metadata.SrcCountry)
+		printer.Printf("DstColocation: %s\n", metadata.DstColo)
 	}
 }
 
-func printRTTMeasurement(measurement *Stats, err error) {
+func printRTTMeasurement(printer *log.Logger, measurement *Stats, err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "RTT - Error during measurement: %v\n", err)
-		os.Exit(1)
+		logger.Printf("RTT - Error during measurement: %v\n", err)
 	} else if measurement != nil {
-		fmt.Printf("RTT-mean: %.3f ms\n", measurement.Mean)
-		fmt.Printf("RTT-stderr: %.3f ms\n", measurement.StdErr)
-		fmt.Printf("RTT-min: %.3f ms\n", measurement.Min)
-		fmt.Printf("RTT-max: %.3f ms\n", measurement.Max)
-		fmt.Printf("RTT-n: %d\n", measurement.NSamples)
+		printer.Printf("RTT-mean: %.3f ms\n", measurement.Mean)
+		printer.Printf("RTT-stderr: %.3f ms\n", measurement.StdErr)
+		printer.Printf("RTT-min: %.3f ms\n", measurement.Min)
+		printer.Printf("RTT-max: %.3f ms\n", measurement.Max)
+		printer.Printf("RTT-n: %d\n", measurement.NSamples)
 	}
 }
 
-func printAdaptiveSpeedMeasurement(label string, measurement *SpeedMeasurementStats, err error) {
+func printAdaptiveSpeedMeasurement(printer *log.Logger, label string, measurement *SpeedMeasurementStats, err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s - Error during measurement: %v\n", label, err)
-		os.Exit(1)
+		logger.Printf("%s - Error during measurement: %v\n", label, err)
 	} else if measurement != nil {
-		fmt.Printf("%s-mean: %.3f Mbps\n", label, measurement.Mean)
-		fmt.Printf("%s-stderr: %.3f Mbps\n", label, measurement.StdErr)
-		fmt.Printf("%s-min: %.3f Mbps\n", label, measurement.Min)
-		fmt.Printf("%s-max: %.3f Mbps\n", label, measurement.Max)
-		fmt.Printf("%s-cat: %.3f Mbps\n", label, measurement.CatSpeed)
-		fmt.Printf("%s-tx: %.3f MiB\n", label, float64(measurement.TXSize)/1024/1024)
-		fmt.Printf("%s-ntx: %d\n", label, measurement.NTX)
-		fmt.Printf("%s-n: %d\n", label, measurement.NSamples)
+		printer.Printf("%s-mean: %.3f Mbps\n", label, measurement.Mean)
+		printer.Printf("%s-stderr: %.3f Mbps\n", label, measurement.StdErr)
+		printer.Printf("%s-min: %.3f Mbps\n", label, measurement.Min)
+		printer.Printf("%s-max: %.3f Mbps\n", label, measurement.Max)
+		printer.Printf("%s-cat: %.3f Mbps\n", label, measurement.CatSpeed)
+		printer.Printf("%s-tx: %.3f MiB\n", label, float64(measurement.TXSize)/1024/1024)
+		printer.Printf("%s-ntx: %d\n", label, measurement.NTX)
+		printer.Printf("%s-n: %d\n", label, measurement.NSamples)
 	}
 }
 
@@ -68,21 +67,35 @@ func SetTransportProtocol(protocol string) {
 	}
 }
 
-func RunAndPrint(transportProtocol string) {
+func RunAndPrint(printer *log.Logger, transportProtocol string) error {
 	SetTransportProtocol(transportProtocol)
 
 	measurementMetadata, err := GetMeasurementMetadata()
-	printMetadata(measurementMetadata, err)
-	fmt.Println()
+	printMetadata(printer, measurementMetadata, err)
+	if err != nil {
+		return err
+	}
+	printer.Println()
 
 	rttStats, cfReqDurStats, err := MeasureRTT()
-	printRTTMeasurement(rttStats, err)
-	fmt.Println()
+	printRTTMeasurement(printer, rttStats, err)
+	if err != nil {
+		return err
+	}
+	printer.Println()
 
 	downlinkStats, err := MeasureSpeedAdaptive("down", cfReqDurStats)
-	printAdaptiveSpeedMeasurement("Downlink", downlinkStats, err)
-	fmt.Println()
+	printAdaptiveSpeedMeasurement(printer, "Downlink", downlinkStats, err)
+	if err != nil {
+		return err
+	}
+	printer.Println()
 
 	uplinkStats, err := MeasureSpeedAdaptive("up", cfReqDurStats)
-	printAdaptiveSpeedMeasurement("Uplink", uplinkStats, err)
+	printAdaptiveSpeedMeasurement(printer, "Uplink", uplinkStats, err)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

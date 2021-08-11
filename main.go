@@ -2,7 +2,8 @@ package main
 
 import (
 	"errors"
-	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -13,6 +14,8 @@ import (
 var (
 	BuildName       = "\b"
 	BuildAnnotation = "git"
+
+	printer = log.New(os.Stdout, "", 0)
 )
 
 type CmdOpts struct {
@@ -35,15 +38,15 @@ func parseFlags() CmdOpts {
 }
 
 func printTimestamp() {
-	fmt.Println()
-	fmt.Printf("At: %s\n", time.Now().Format(time.RFC1123Z))
-	fmt.Println()
+	printer.Println()
+	printer.Printf("At: %s\n", time.Now().Format(time.RFC1123Z))
+	printer.Println()
 }
 
 func main() {
 	cmdOpts := parseFlags()
 
-	fmt.Printf("cfspeed %s (%s)\n", BuildName, BuildAnnotation)
+	printer.Printf("cfspeed %s (%s)\n", BuildName, BuildAnnotation)
 	if cmdOpts.showVersionAndExit {
 		return
 	}
@@ -51,17 +54,23 @@ func main() {
 	// if none specified, pick up a transport protocol automatically and then exit
 	if !cmdOpts.testIP4 && !cmdOpts.testIP6 {
 		printTimestamp()
-		cfspeed.RunAndPrint("tcp")
+		if cfspeed.RunAndPrint(printer, "tcp") != nil {
+			os.Exit(1)
+		}
 		return
 	}
 
 	// these options are not mutually exclusive
 	if cmdOpts.testIP4 {
 		printTimestamp()
-		cfspeed.RunAndPrint("tcp4")
+		if cfspeed.RunAndPrint(printer, "tcp4") != nil {
+			os.Exit(1)
+		}
 	}
 	if cmdOpts.testIP6 {
 		printTimestamp()
-		cfspeed.RunAndPrint("tcp6")
+		if cfspeed.RunAndPrint(printer, "tcp6") != nil {
+			os.Exit(1)
+		}
 	}
 }
