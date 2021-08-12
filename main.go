@@ -1,12 +1,12 @@
 package main
 
 import (
-	"errors"
+	"fmt"
 	"log"
 	"os"
 	"time"
 
-	"github.com/spf13/pflag"
+	"github.com/spf13/cobra"
 
 	"github.com/makotom/cfspeed/cfspeed"
 )
@@ -19,22 +19,8 @@ var (
 )
 
 type CmdOpts struct {
-	testIP4            bool
-	testIP6            bool
-	showVersionAndExit bool
-}
-
-func parseFlags() CmdOpts {
-	ret := CmdOpts{}
-
-	pflag.ErrHelp = errors.New("")
-
-	pflag.BoolVarP(&ret.testIP4, "ip4", "4", false, "Ensure measurements over IPv4")
-	pflag.BoolVarP(&ret.testIP6, "ip6", "6", false, "Ensure measurements over IPv6")
-	pflag.BoolVar(&ret.showVersionAndExit, "version", false, "Show version information and exit")
-	pflag.Parse()
-
-	return ret
+	testIP4 bool
+	testIP6 bool
 }
 
 func printTimestamp() {
@@ -44,33 +30,47 @@ func printTimestamp() {
 }
 
 func main() {
-	cmdOpts := parseFlags()
+	cmdOpts := &CmdOpts{}
 
-	printer.Printf("cfspeed %s (%s)\n", BuildName, BuildAnnotation)
-	if cmdOpts.showVersionAndExit {
-		return
+	cmd := &cobra.Command{
+		Use:          "cfspeed",
+		Version:      BuildName,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			printer.Printf(cmd.VersionTemplate())
+
+			// if none specified, pick up a transport protocol automatically and then exit
+			if !cmdOpts.testIP4 && !cmdOpts.testIP6 {
+				printTimestamp()
+				return cfspeed.RunAndPrint(printer, "tcp")
+			}
+
+			// these options are not mutually exclusive
+			if cmdOpts.testIP4 {
+				printTimestamp()
+				if err := cfspeed.RunAndPrint(printer, "tcp4"); err != nil {
+					return err
+				}
+			}
+			if cmdOpts.testIP6 {
+				printTimestamp()
+				if err := cfspeed.RunAndPrint(printer, "tcp6"); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		},
 	}
 
-	// if none specified, pick up a transport protocol automatically and then exit
-	if !cmdOpts.testIP4 && !cmdOpts.testIP6 {
-		printTimestamp()
-		if cfspeed.RunAndPrint(printer, "tcp") != nil {
-			os.Exit(1)
-		}
-		return
-	}
+	flags := cmd.Flags()
 
-	// these options are not mutually exclusive
-	if cmdOpts.testIP4 {
-		printTimestamp()
-		if cfspeed.RunAndPrint(printer, "tcp4") != nil {
-			os.Exit(1)
-		}
-	}
-	if cmdOpts.testIP6 {
-		printTimestamp()
-		if cfspeed.RunAndPrint(printer, "tcp6") != nil {
-			os.Exit(1)
-		}
+	flags.BoolVarP(&cmdOpts.testIP4, "ip4", "4", false, "ensure measurements over IPv4")
+	flags.BoolVarP(&cmdOpts.testIP6, "ip6", "6", false, "ensure measurements over IPv6")
+
+	cmd.SetVersionTemplate(fmt.Sprintf("cfspeed %s (%s)\n", BuildName, BuildAnnotation))
+
+	if cmd.Execute() != nil {
+		os.Exit(1)
 	}
 }

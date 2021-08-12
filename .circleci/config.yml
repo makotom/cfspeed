@@ -61,8 +61,7 @@ commands:
           command: ./cfspeed --version
       - run:
           name: Show help message
-          shell: bash
-          command: "! ./cfspeed --help"
+          command: ./cfspeed --help
       - run:
           name: Run a normal test
           command: ./cfspeed
