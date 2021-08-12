@@ -5,26 +5,21 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
-var logger = log.New(os.Stderr, "", 0)
-
-func printMetadata(printer *log.Logger, metadata *MeasurementMetadata, err error) {
-	if err != nil {
-		logger.Printf("Error while fetching metadata: %v\n", err)
-	} else if metadata != nil {
+func printMetadata(printer *log.Logger, metadata *MeasurementMetadata) {
+	if metadata != nil {
 		printer.Printf("SrcIP: %s (AS%s)\n", metadata.SrcIP, metadata.SrcASN)
 		printer.Printf("SrcLocation: %s, %s\n", metadata.SrcCity, metadata.SrcCountry)
 		printer.Printf("DstColocation: %s\n", metadata.DstColo)
 	}
 }
 
-func printRTTMeasurement(printer *log.Logger, measurement *Stats, err error) {
-	if err != nil {
-		logger.Printf("RTT - Error during measurement: %v\n", err)
-	} else if measurement != nil {
+func printRTTMeasurement(printer *log.Logger, measurement *Stats) {
+	if measurement != nil {
 		printer.Printf("RTT-mean: %.3f ms\n", measurement.Mean)
 		printer.Printf("RTT-stderr: %.3f ms\n", measurement.StdErr)
 		printer.Printf("RTT-min: %.3f ms\n", measurement.Min)
@@ -33,10 +28,8 @@ func printRTTMeasurement(printer *log.Logger, measurement *Stats, err error) {
 	}
 }
 
-func printAdaptiveSpeedMeasurement(printer *log.Logger, label string, measurement *SpeedMeasurementStats, err error) {
-	if err != nil {
-		logger.Printf("%s - Error during measurement: %v\n", label, err)
-	} else if measurement != nil {
+func printAdaptiveSpeedMeasurement(printer *log.Logger, label string, measurement *SpeedMeasurementStats) {
+	if measurement != nil {
 		printer.Printf("%s-mean: %.3f Mbps\n", label, measurement.Mean)
 		printer.Printf("%s-stderr: %.3f Mbps\n", label, measurement.StdErr)
 		printer.Printf("%s-min: %.3f Mbps\n", label, measurement.Min)
@@ -49,8 +42,8 @@ func printAdaptiveSpeedMeasurement(printer *log.Logger, label string, measuremen
 }
 
 func SetTransportProtocol(protocol string) {
-	// cf (1). https://go.googlesource.com/go/+/refs/tags/go1.16.6/src/net/http/transport.go#42
-	// cf (2). https://go.googlesource.com/go/+/refs/tags/go1.16.6/src/net/http/transport.go#130
+	// cf. https://go.googlesource.com/go/+/refs/tags/go1.16.6/src/net/http/transport.go#42
+	// cf. https://go.googlesource.com/go/+/refs/tags/go1.16.6/src/net/http/transport.go#130
 	http.DefaultTransport = &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
@@ -71,31 +64,31 @@ func RunAndPrint(printer *log.Logger, transportProtocol string) error {
 	SetTransportProtocol(transportProtocol)
 
 	measurementMetadata, err := GetMeasurementMetadata()
-	printMetadata(printer, measurementMetadata, err)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "could not fetch metadata")
 	}
+	printMetadata(printer, measurementMetadata)
 	printer.Println()
 
 	rttStats, cfReqDurStats, err := MeasureRTT()
-	printRTTMeasurement(printer, rttStats, err)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "RTT measurement failed")
 	}
+	printRTTMeasurement(printer, rttStats)
 	printer.Println()
 
 	downlinkStats, err := MeasureSpeedAdaptive("down", cfReqDurStats)
-	printAdaptiveSpeedMeasurement(printer, "Downlink", downlinkStats, err)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "downlink measurement failed")
 	}
+	printAdaptiveSpeedMeasurement(printer, "Downlink", downlinkStats)
 	printer.Println()
 
 	uplinkStats, err := MeasureSpeedAdaptive("up", cfReqDurStats)
-	printAdaptiveSpeedMeasurement(printer, "Uplink", uplinkStats, err)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "uplink measurement failed")
 	}
+	printAdaptiveSpeedMeasurement(printer, "Uplink", uplinkStats)
 
 	return nil
 }
