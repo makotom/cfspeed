@@ -82,7 +82,7 @@ jobs:
 
   build:
     docker:
-      - image: golang:1.17-rc
+      - image: golang:1.17
     parameters:
       goos:
         type: string
@@ -171,7 +171,7 @@ jobs:
           name: Create a release
           command: |
             . BUILD_NAME
-            gh release create -R ${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME} -t "${BUILD_NAME}" -n "" "${BUILD_NAME}" *.tar.gz *.zip
+            gh release create -R ${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME} -t "${BUILD_NAME}" -n "" "${BUILD_NAME}" --target ${CIRCLE_SHA1} *.tar.gz *.zip
 
 workflows:
   build-test-release:
@@ -191,7 +191,9 @@ workflows:
                 - arm64
           requires:
             - determine-build-name
-      - go-test
+      - go-test:
+          requires:
+            - determine-build-name
       - smoke-test-linux-amd64:
           requires:
             - build-linux-amd64
