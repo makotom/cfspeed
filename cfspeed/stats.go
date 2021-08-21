@@ -2,6 +2,7 @@ package cfspeed
 
 import (
 	"math"
+	"sort"
 	"time"
 )
 
@@ -33,6 +34,28 @@ func getStdDevUsingMean(series []float64, mean float64) float64 {
 	return math.Sqrt(getSquareMean(series) - (mean * mean))
 }
 
+func getDeciles(series []float64) []float64 {
+	ret := make([]float64, 9)
+	sorted := make([]float64, len(series))
+	elemsPerStep := float64(len(series)) / 10
+
+	if len(series) == 0 {
+		return ret
+	}
+
+	if copy(sorted, series) == 0 {
+		return ret
+	}
+
+	sort.Float64s(sorted)
+
+	for iter := 1; iter < 10; iter += 1 {
+		ret[iter-1] = sorted[int64(math.Floor(elemsPerStep*float64(iter)))]
+	}
+
+	return ret
+}
+
 func getStats(series []float64) *Stats {
 	ret := &Stats{
 		Min:      math.Inf(1),
@@ -56,6 +79,7 @@ func getStats(series []float64) *Stats {
 	ret.Mean = getMean(series)
 	ret.StdDev = getStdDevUsingMean(series, ret.Mean)
 	ret.StdErr = ret.StdDev / math.Sqrt(float64(len(series)))
+	ret.Deciles = getDeciles(series)
 
 	return ret
 }
