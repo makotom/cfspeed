@@ -2,6 +2,7 @@ package cfspeed
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -18,12 +19,23 @@ func printMetadata(printer *log.Logger, metadata *MeasurementMetadata) {
 	}
 }
 
+func formatDeciles(deciles []float64) string {
+	numStrs := []string{}
+
+	for _, decile := range deciles {
+		numStrs = append(numStrs, fmt.Sprintf("%.3f", decile))
+	}
+
+	return fmt.Sprintf("%v", numStrs)
+}
+
 func printRTTMeasurement(printer *log.Logger, measurement *Stats) {
 	if measurement != nil {
 		printer.Printf("RTT-mean: %.3f ms\n", measurement.Mean)
 		printer.Printf("RTT-stderr: %.3f ms\n", measurement.StdErr)
 		printer.Printf("RTT-min: %.3f ms\n", measurement.Min)
 		printer.Printf("RTT-max: %.3f ms\n", measurement.Max)
+		printer.Printf("RTT-deciles: %s ms\n", formatDeciles(measurement.Deciles))
 		printer.Printf("RTT-n: %d\n", measurement.NSamples)
 	}
 }
@@ -34,6 +46,7 @@ func printAdaptiveSpeedMeasurement(printer *log.Logger, label string, measuremen
 		printer.Printf("%s-stderr: %.3f Mbps\n", label, measurement.StdErr)
 		printer.Printf("%s-min: %.3f Mbps\n", label, measurement.Min)
 		printer.Printf("%s-max: %.3f Mbps\n", label, measurement.Max)
+		printer.Printf("%s-deciles: %s Mbps\n", label, formatDeciles(measurement.Deciles))
 		printer.Printf("%s-cat: %.3f Mbps\n", label, measurement.CatSpeed)
 		printer.Printf("%s-tx: %.3f MiB\n", label, float64(measurement.TXSize)/1024/1024)
 		printer.Printf("%s-ntx: %d\n", label, measurement.NTX)

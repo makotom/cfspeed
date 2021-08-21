@@ -22,6 +22,7 @@ type Stats struct {
 	MinIndex int
 	Max      float64
 	MaxIndex int
+	Deciles  []float64
 }
 
 type SpeedMeasurement struct {
@@ -41,5 +42,6 @@ type SpeedMeasurementStats struct {
 	StdErr   float64
 	Min      float64
 	Max      float64
+	Deciles  []float64
 	CatSpeed float64
 }

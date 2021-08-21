@@ -197,6 +197,7 @@ func MeasureSpeedAdaptive(mode string, cfReqDurStats *Stats) (*SpeedMeasurementS
 		StdErr:   stats.StdErr,
 		Min:      stats.Min,
 		Max:      stats.Max,
+		Deciles:  stats.Deciles,
 		CatSpeed: catSpeed,
 	}, nil
 }
