@@ -37,7 +37,7 @@ func getStdDevUsingMean(series []float64, mean float64) float64 {
 func getDeciles(series []float64) []float64 {
 	ret := make([]float64, 9)
 	sorted := make([]float64, len(series))
-	elemsPerStep := float64(len(series)) / 10
+	elemsPerStep := float64(len(series)-1) / 10
 
 	if len(series) == 0 {
 		return ret
@@ -50,7 +50,7 @@ func getDeciles(series []float64) []float64 {
 	sort.Float64s(sorted)
 
 	for iter := 1; iter < 10; iter += 1 {
-		ret[iter-1] = sorted[int64(math.Floor(elemsPerStep*float64(iter)))]
+		ret[iter-1] = sorted[int64(math.Round(elemsPerStep*float64(iter)))]
 	}
 
 	return ret

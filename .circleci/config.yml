@@ -117,8 +117,8 @@ jobs:
       - image: golang
     steps:
       - checkout
-      - run: go vet .
-      - run: go test .
+      - run: go vet ./...
+      - run: go test -cover ./...
 
   smoke-test-linux-amd64:
     docker:
