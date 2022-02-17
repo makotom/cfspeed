@@ -33,12 +33,17 @@ build_android() {
     goos=$1
     goarch=$2
 
-    if [ ! -d android-ndk-r21e ]
+    # https://developer.android.com/ndk/downloads
+    ndk_label="android-ndk-r23b"
+    ndk_archive="${ndk_label}-linux.zip"
+    ndk_checksum="f47ec4c4badd11e9f593a8450180884a927c330d"
+    ndk_android_version="android31"
+
+    if [ ! -d "${ndk_label}" ]
     then
-        # https://developer.android.com/ndk/downloads
-        curl -JOL https://dl.google.com/android/repository/android-ndk-r23b-linux.zip
-        echo 'f47ec4c4badd11e9f593a8450180884a927c330d android-ndk-r23b-linux.zip' | sha1sum -c
-        unzip android-ndk-r23b-linux.zip
+        curl -fJOL "https://dl.google.com/android/repository/${ndk_archive}"
+        echo "${ndk_checksum} ${ndk_archive}" | sha1sum -c
+        unzip "${ndk_archive}"
     fi
 
     if [ "${goarch}" == "arm64" ]
@@ -49,8 +54,8 @@ build_android() {
         arch_clang="x86_64"
     fi
 
-    CC="$(pwd)/android-ndk-r23b/toolchains/llvm/prebuilt/linux-x86_64/bin/${arch_clang}-linux-android31-clang" \
-    CXX="$(pwd)/android-ndk-r23b/toolchains/llvm/prebuilt/linux-x86_64/bin/${arch_clang}-linux-android31-clang++" \
+    CC="$(pwd)/${ndk_label}/toolchains/llvm/prebuilt/linux-x86_64/bin/${arch_clang}-linux-${ndk_android_version}-clang" \
+    CXX="$(pwd)/${ndk_label}/toolchains/llvm/prebuilt/linux-x86_64/bin/${arch_clang}-linux-${ndk_android_version}-clang++" \
     GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=1 go build -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "dist/${goos}/${goarch}/cfspeed" .
 }
 
