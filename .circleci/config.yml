@@ -69,7 +69,7 @@ commands:
 jobs:
   determine-build-name:
     docker:
-      - image: debian:buster-slim
+      - image: ubuntu:rolling
     steps:
       - run:
           name: Determine build name
@@ -157,16 +157,19 @@ jobs:
 
   release:
     docker:
-      - image: cimg/base:stable
+      - image: ubuntu:rolling
     steps:
-      - attach_workspace:
-          at: .
       - run:
           name: Install dependencies
           command: |
+            apt update
+            apt install -y curl git zstd
+
             tmpPath=$(mktemp)
             curl -sSJL https://api.github.com/repos/cli/cli/releases/latest | grep -o 'https://github.com/cli/cli/releases/download/[^/]\{1,\}/gh_[^/]\{1,\}_linux_amd64.deb' | xargs curl -o $tmpPath -JL
-            sudo dpkg -i $tmpPath
+            dpkg -i $tmpPath
+      - attach_workspace:
+          at: .
       - run:
           name: Create a release
           command: |
