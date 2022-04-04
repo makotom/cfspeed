@@ -1,88 +1,43 @@
 version: 2.1
 
-commands:
-  smoke-test-common-steps:
-    parameters:
-      goos:
-        type: string
-      goarch:
-        type: string
-    steps:
-      - attach_workspace:
-          at: .
-      - when:
-          condition:
-            or:
-              - equal:
-                  - << parameters.goos >>
-                  - linux
-              - equal:
-                  - << parameters.goos >>
-                  - android
-          steps:
-            - run:
-                name: Extract tarball
-                command: |
-                  . BUILD_NAME
-                  tar -xf cfspeed-${BUILD_NAME}-<< parameters.goos >>-<< parameters.goarch >>.tar.gz
-      - when:
-          condition:
-            equal:
-              - << parameters.goos >>
-              - windows
-          steps:
-            - run:
-                name: Extract zip
-                command: |
-                  $ProgressPreference = "SilentlyContinue"
-
-                  $BuildName = $(& bash -c '. BUILD_NAME; echo $BUILD_NAME')
-                  Expand-Archive cfspeed-${BuildName}-<< parameters.goos >>-<< parameters.goarch >>.zip .
-      - unless:
-          condition:
-            or:
-              - equal:
-                  - << parameters.goos >>
-                  - linux
-              - equal:
-                  - << parameters.goos >>
-                  - android
-              - equal:
-                  - << parameters.goos >>
-                  - windows
-          steps:
-            - run:
-                name: Extract zip
-                command: |
-                  . BUILD_NAME
-                  unzip cfspeed-${BUILD_NAME}-<< parameters.goos >>-<< parameters.goarch >>.zip
-      - run:
-          name: Show version
-          command: ./cfspeed --version
-      - run:
-          name: Show help message
-          command: ./cfspeed --help
-      - run:
-          name: Run a normal test
-          command: ./cfspeed
+executors:
+  go:
+    docker:
+      - image: golang:1.18
+    resource_class: medium
+  ubuntu-docker:
+    docker:
+      - image: ubuntu:rolling
+    resource_class: medium
+  ubuntu-machine-aarch64:
+    machine:
+      image: ubuntu-2004:current
+    resource_class: arm.medium
+  windows:
+    machine:
+      image: windows-server-2019-vs2019:stable
+    resource_class: windows.medium
+    shell: powershell.exe
+  macos:
+    macos:
+      xcode: 13.3.0
+    resource_class: macos.x86.medium.gen2
 
 jobs:
   determine-build-name:
-    docker:
-      - image: ubuntu:rolling
+    executor: ubuntu-docker
     steps:
       - run:
           name: Determine build name
           command: |
-            echo export BUILD_NAME=\"0.1.${CIRCLE_BUILD_NUM}-${CIRCLE_SHA1:0:7}\" | tee -a BUILD_NAME
+            echo "export BUILD_NAME='0.1.${CIRCLE_BUILD_NUM}-${CIRCLE_SHA1:0:7}'" | tee -a BUILD_NAME
       - persist_to_workspace:
           root: .
           paths:
             - BUILD_NAME
 
   build:
-    docker:
-      - image: golang:1.17
+    executor: go
     parameters:
       goos:
         type: string
@@ -101,7 +56,10 @@ jobs:
           name: Build
           command: |
             . dist/BUILD_NAME
-            GOOS_LIST_OVERRIDE='("<< parameters.goos >>")' GOARCH_LIST_OVERRIDE='("<< parameters.goarch >>")' ./build-and-pack-all.sh
+            GOOS_LIST_OVERRIDE=("${TARGET_GOOS}") GOARCH_LIST_OVERRIDE=("${TARGET_GOARCH}") ./build-and-pack-all.sh
+          environment:
+            TARGET_GOOS: << parameters.goos >>
+            TARGET_GOARCH: << parameters.goarch >>
       - persist_to_workspace:
           root: dist
           paths:
@@ -113,57 +71,43 @@ jobs:
           destination: /
 
   go-test:
-    docker:
-      - image: golang
+    executor: go
     steps:
       - checkout
       - run: go vet ./...
       - run: go test -cover ./...
 
-  smoke-test-linux-amd64:
-    docker:
-      - image: archlinux
+  smoke-test-unified:
+    parameters:
+      executor:
+        type: string
+      extract-cmd:
+        type: string
+    executor: << parameters.executor >>
     steps:
-      - smoke-test-common-steps:
-          goos: linux
-          goarch: amd64
-
-  smoke-test-linux-arm64:
-    machine:
-      image: ubuntu-2004:202101-01
-    resource_class: arm.medium
-    steps:
-      - smoke-test-common-steps:
-          goos: linux
-          goarch: arm64
-
-  smoke-test-windows-amd64:
-    machine:
-      image: windows-server-2019-vs2019:stable
-    resource_class: windows.medium
-    shell: powershell.exe
-    steps:
-      - smoke-test-common-steps:
-          goos: windows
-          goarch: amd64
-
-  smoke-test-darwin-amd64:
-    macos:
-      xcode: 12.4.0
-    steps:
-      - smoke-test-common-steps:
-          goos: darwin
-          goarch: amd64
+      - attach_workspace:
+          at: .
+      - run:
+          name: Extracting executable
+          command: << parameters.extract-cmd >>
+      - run:
+          name: Show version
+          command: ./cfspeed --version
+      - run:
+          name: Show help message
+          command: ./cfspeed --help
+      - run:
+          name: Run a normal test
+          command: ./cfspeed
 
   release:
-    docker:
-      - image: ubuntu:rolling
+    executor: ubuntu-docker
     steps:
       - run:
           name: Install dependencies
           command: |
             apt update
-            apt install -y curl git zstd
+            apt install -y curl git
 
             tmpPath=$(mktemp)
             curl -sSJL https://api.github.com/repos/cli/cli/releases/latest | grep -o 'https://github.com/cli/cli/releases/download/[^/]\{1,\}/gh_[^/]\{1,\}_linux_amd64.deb' | xargs curl -o $tmpPath -JL
@@ -174,7 +118,7 @@ jobs:
           name: Create a release
           command: |
             . BUILD_NAME
-            gh release create -R ${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME} -t "${BUILD_NAME}" -n "" "${BUILD_NAME}" --target ${CIRCLE_SHA1} *.tar.gz *.zip
+            gh release create -R "${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}" -t "${BUILD_NAME}" -n "" "${BUILD_NAME}" --target "${CIRCLE_SHA1}" ./*.tar.gz ./*.zip
 
 workflows:
   build-test-release:
@@ -194,21 +138,47 @@ workflows:
                 - arm64
           requires:
             - determine-build-name
+
       - go-test:
           requires:
             - determine-build-name
-      - smoke-test-linux-amd64:
+
+      - smoke-test-unified:
+          name: smoke-test-linux-amd64
           requires:
             - build-linux-amd64
-      - smoke-test-linux-arm64:
+          executor: ubuntu-docker
+          extract-cmd: |
+            apt update
+            apt install -y ca-certificates
+            . BUILD_NAME
+            tar -xf "cfspeed-${BUILD_NAME}-linux-amd64.tar.gz"
+      - smoke-test-unified:
+          name: smoke-test-linux-arm64
           requires:
             - build-linux-arm64
-      - smoke-test-windows-amd64:
+          executor: ubuntu-machine-aarch64
+          extract-cmd: |
+            . BUILD_NAME
+            tar -xf "cfspeed-${BUILD_NAME}-linux-arm64.tar.gz"
+      - smoke-test-unified:
+          name: smoke-test-windows-amd64
           requires:
             - build-windows-amd64
-      - smoke-test-darwin-amd64:
+          executor: windows
+          extract-cmd: |
+            $ProgressPreference = "SilentlyContinue"
+            $BuildName = $(& bash -c '. BUILD_NAME; printenv BUILD_NAME')
+            Expand-Archive "cfspeed-${BuildName}-windows-amd64.zip" .
+      - smoke-test-unified:
+          name: smoke-test-darwin-amd64
           requires:
             - build-darwin-amd64
+          executor: macos
+          extract-cmd: |
+            . BUILD_NAME
+            unzip "cfspeed-${BUILD_NAME}-darwin-amd64.zip"
+
       - release:
           requires:
             - build
