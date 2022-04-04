@@ -8,12 +8,10 @@ BUILD_NAME=${BUILD_NAME:-"git"}
 BUILD_ANNOTATION="$(date --iso-8601=seconds)"
 BUILD_NAME_VAR_PACKAGE="main"
 
-if [ "${GOOS_LIST_OVERRIDE:-}" ]
-then
+if [[ "${GOOS_LIST_OVERRIDE:-}" ]]; then
     eval GOOS_LIST="${GOOS_LIST_OVERRIDE}"
 fi
-if [ "${GOARCH_LIST_OVERRIDE:-}" ]
-then
+if [[ "${GOARCH_LIST_OVERRIDE:-}" ]]; then
     eval GOARCH_LIST="${GOARCH_LIST_OVERRIDE}"
 fi
 
@@ -21,12 +19,12 @@ build_gc() {
     goos=$1
     goarch=$2
 
-    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "dist/${goos}/${goarch}/cfspeed" .
-
-    if [ "${goos}" == "windows" ]
-    then
-        mv "dist/${goos}/${goarch}/cfspeed" "dist/${goos}/${goarch}/cfspeed.exe"
+    OUTPUT="$(pwd)/dist/${goos}/${goarch}/cfspeed"
+    if [[ "${goos}" == "windows" ]]; then
+        OUTPUT="$(pwd)/dist/${goos}/${goarch}/cfspeed.exe"
     fi
+
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "${OUTPUT}" .
 }
 
 build_android() {
@@ -39,18 +37,15 @@ build_android() {
     ndk_checksum="f47ec4c4badd11e9f593a8450180884a927c330d"
     ndk_android_version="android31"
 
-    if [ ! -d "${ndk_label}" ]
-    then
+    if [[ ! -d "${ndk_label}" ]]; then
         curl -fJOL "https://dl.google.com/android/repository/${ndk_archive}"
         echo "${ndk_checksum} ${ndk_archive}" | sha1sum -c
         unzip "${ndk_archive}"
     fi
 
-    if [ "${goarch}" == "arm64" ]
-    then
+    if [[ "${goarch}" == "arm64" ]]; then
         arch_clang="aarch64"
-    elif [ "${goarch}" == "amd64" ]
-    then
+    elif [[ "${goarch}" == "amd64" ]]; then
         arch_clang="x86_64"
     fi
 
@@ -64,8 +59,7 @@ package() {
     goarch=$2
 
     pushd "dist/${goos}/${goarch}"
-    if [ "${goos}" == "linux" ] || [ "${goos}" == "android" ]
-    then
+    if [[ "${goos}" == "linux" ]] || [[ "${goos}" == "android" ]]; then
         tar -czf "../../cfspeed-${BUILD_NAME}-${goos}-${goarch}.tar.gz" .
     else
         zip -r "../../cfspeed-${BUILD_NAME}-${goos}-${goarch}.zip" .
@@ -73,16 +67,13 @@ package() {
     popd
 }
 
-for goos in "${GOOS_LIST[@]}"
-do
-    for goarch in "${GOARCH_LIST[@]}"
-    do
+for goos in "${GOOS_LIST[@]}"; do
+    for goarch in "${GOARCH_LIST[@]}"; do
         echo "${goos}/${goarch}"
 
         mkdir -p "dist/${goos}/${goarch}"
 
-        if [ "${goos}" == "android" ]
-        then
+        if [[ "${goos}" == "android" ]]; then
             build_android "${goos}" "${goarch}"
         else
             build_gc "${goos}" "${goarch}"
