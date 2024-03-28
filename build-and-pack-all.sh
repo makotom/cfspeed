@@ -24,7 +24,7 @@ build_gc() {
         OUTPUT="$(pwd)/dist/${goos}/${goarch}/cfspeed.exe"
     fi
 
-    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "${OUTPUT}" .
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "${OUTPUT}" -buildvcs=false .
 }
 
 build_android() {
@@ -51,7 +51,7 @@ build_android() {
 
     CC="$(pwd)/${ndk_label}/toolchains/llvm/prebuilt/linux-x86_64/bin/${arch_clang}-linux-${ndk_android_version}-clang" \
     CXX="$(pwd)/${ndk_label}/toolchains/llvm/prebuilt/linux-x86_64/bin/${arch_clang}-linux-${ndk_android_version}-clang++" \
-    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=1 go build -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "dist/${goos}/${goarch}/cfspeed" .
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=1 go build -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "dist/${goos}/${goarch}/cfspeed" -buildvcs=false .
 }
 
 package() {
