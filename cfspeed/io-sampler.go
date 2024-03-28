@@ -27,12 +27,12 @@ func (r *SamplingReaderWriter) Read(p []byte) (int, error) {
 	var err error = nil
 
 	size := len(p)
-	if time.Since(r.GoodThru) > 0 {
-		size = 0
-		err = io.EOF
-	}
 	if r.SizeRead+int64(size) > r.Quota {
 		size = int(r.Quota - r.SizeRead)
+		err = io.EOF
+	}
+	if time.Since(r.GoodThru) > 0 {
+		size = 0
 		err = io.EOF
 	}
 
