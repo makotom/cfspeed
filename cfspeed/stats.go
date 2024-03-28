@@ -8,6 +8,18 @@ import (
 
 const ioSamplingWindowWidthMin = 200 * time.Millisecond
 
+type Stats struct {
+	NSamples int
+	Mean     float64
+	StdDev   float64
+	StdErr   float64
+	Min      float64
+	MinIndex int
+	Max      float64
+	MaxIndex int
+	Deciles  []float64
+}
+
 func getMean(series []float64) float64 {
 	ret := float64(0)
 	nSamplesF64 := float64(len(series))
@@ -114,7 +126,7 @@ func getIOLatencyStats(ioEvents []*IOEvent) *Stats {
 	return getDurationStats(latencies)
 }
 
-func analyseIOReadEvents(_, end time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []float64 {
+func getIOReadMBPSSamples(_, end time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []float64 {
 	mbpsSamples := []float64{}
 
 	ioLatencyStats := getIOLatencyStats(ioEvents)
@@ -147,7 +159,7 @@ func analyseIOReadEvents(_, end time.Time, cfReqDur time.Duration, ioEvents []*I
 	return mbpsSamples
 }
 
-func analyseIOWriteEvents(start, _ time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []float64 {
+func getIOWriteMBPSSamples(start, _ time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []float64 {
 	mbpsSamples := []float64{}
 
 	ioLatencyStats := getIOLatencyStats(ioEvents)
@@ -182,14 +194,12 @@ func analyseIOWriteEvents(start, _ time.Time, cfReqDur time.Duration, ioEvents [
 	return mbpsSamples
 }
 
-func analyseIOEvents(ioMode string, start, end time.Time, cfReqDurStats *Stats, ioEvents []*IOEvent) []float64 {
-	cfReqDur := time.Duration(cfReqDurStats.Mean * 1000 * 1000)
-
-	switch ioMode {
-	case "read":
-		return analyseIOReadEvents(start, end, cfReqDur, ioEvents)
-	case "write":
-		return analyseIOWriteEvents(start, end, cfReqDur, ioEvents)
+func getMBPSSamplesFromMeasurement(measurement *SpeedMeasurement) []float64 {
+	switch measurement.Direction {
+	case "down":
+		return getIOWriteMBPSSamples(measurement.Start, measurement.End, measurement.CFReqDur, measurement.IOSampler.Events)
+	case "up":
+		return getIOReadMBPSSamples(measurement.Start, measurement.End, measurement.CFReqDur, measurement.IOSampler.Events)
 	default:
 		return []float64{}
 	}
@@ -206,16 +216,16 @@ func getDurationStats(durations []time.Duration) *Stats {
 	return getStats(durationSamples)
 }
 
-func getSpeedMeasurementStats(measurements []*SpeedMeasurement, cfReqDurStats *Stats) (float64, *Stats) {
+func getSpeedMeasurementStats(measurements []*SpeedMeasurement) (*Stats, int64, int64) {
 	mbpsSamples := []float64{}
 	sizeSum := int64(0)
 	durationSum := int64(0)
 
 	for _, measurement := range measurements {
-		mbpsSamples = append(mbpsSamples, analyseIOEvents(measurement.IOSampler.Mode, measurement.Start, measurement.End, cfReqDurStats, measurement.IOSampler.CallEvents)...)
+		mbpsSamples = append(mbpsSamples, getMBPSSamplesFromMeasurement(measurement)...)
 		sizeSum += measurement.Size
 		durationSum += measurement.Duration.Microseconds()
 	}
 
-	return float64(8*sizeSum) / float64(durationSum), getStats(mbpsSamples)
+	return getStats(mbpsSamples), sizeSum, durationSum
 }

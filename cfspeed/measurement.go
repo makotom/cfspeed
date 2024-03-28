@@ -1,6 +1,7 @@
 package cfspeed
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,28 +13,53 @@ const (
 	downURLTemplate = "https://speed.cloudflare.com/__down?bytes=%d"
 	upURLTemplate   = "https://speed.cloudflare.com/__up"
 
-	rttMeasurementSoftTimeout = 2 * time.Second // Test element starts unless exceeding this duration
-
-	adaptiveMeasurementBytesMin      = int64(64 * 1024)         // 64 KiB
-	adaptiveMeasurementBytesMax      = int64(512 * 1024 * 1024) // 512 MiB
-	adaptiveMeasurementExpBase       = 2                        // 64 k, 128 k, 256 k, 512 k, 1 M, 2 M, 4 M, 8 M, 16 M, 32 M, 64 M, 128 M, 256 M, 512 M
-	adaptiveMeasurementTimeThreshold = 2 * time.Second
-	adaptiveMeasurementCount         = 5
+	rttMeasurementDuration   = 2 * time.Second   // Measurement resumes by sending another ping until exceeding this time duration
+	speedMeasurementDuration = 10 * time.Second  // Download / Upload continues until exceeding this time duration
+	downloadSizeMax          = 512 * 1024 * 1024 // Maximum size of data to be downloaded; 512 MiB
+	uploadSizeMax            = 512 * 1024 * 1024 // Maximum size of data to be uploaded; 512 MiB
 )
 
-func flushHTTPResponse(resp *http.Response) (int64, *IOSampler, error) {
-	flusher := InitWriteSampler()
+type MeasurementMetadata struct {
+	SrcIP      string
+	SrcASN     string
+	SrcCity    string
+	SrcCountry string
+	DstColo    string
+}
 
-	flushedSize, err := io.Copy(flusher, resp.Body)
-	if err != nil {
+type SpeedMeasurement struct {
+	Direction      string
+	Size           int64
+	Start          time.Time
+	End            time.Time
+	Duration       time.Duration
+	IOSampler      IOSampler
+	CFReqDur       time.Duration
+	HTTPRespHeader http.Header
+}
+
+type SpeedMeasurementStats struct {
+	NSamples int
+	TXSize   int64
+	Mean     float64
+	StdErr   float64
+	Min      float64
+	Max      float64
+	Deciles  []float64
+	CatSpeed float64
+}
+
+func flushHTTPResponse(resp *http.Response, maxSize int64, flushUntil time.Time) (int64, *IOSampler, error) {
+	drain := InitSamplingReaderWriter(maxSize, flushUntil)
+
+	flushedSize, err := io.Copy(drain, resp.Body)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return 0, nil, err
 	}
+
 	err = resp.Body.Close()
-	if err != nil {
-		return 0, nil, err
-	}
 
-	return flushedSize, &flusher.IOSampler, nil
+	return flushedSize, &drain.IOSampler, err
 }
 
 func getCFReqDur(httpRespHeader *http.Header) time.Duration {
@@ -47,12 +73,94 @@ func getCFReqDur(httpRespHeader *http.Header) time.Duration {
 	return cfReqDur
 }
 
+func doDownlinkMeasurement(maxSize int64, measureUntil time.Time) (*SpeedMeasurement, error) {
+	getURL := fmt.Sprintf(downURLTemplate, maxSize)
+	start := time.Now()
+
+	resp, err := http.Get(getURL)
+	if err != nil {
+		return nil, err
+	}
+	downloadedSize, ioSampler, err := flushHTTPResponse(resp, maxSize, measureUntil)
+	if err != nil {
+		return nil, err
+	}
+
+	end := time.Now()
+
+	return &SpeedMeasurement{
+		Direction:      "down",
+		Size:           downloadedSize,
+		Start:          start,
+		End:            end,
+		Duration:       end.Sub(start),
+		IOSampler:      *ioSampler,
+		CFReqDur:       getCFReqDur(&resp.Header),
+		HTTPRespHeader: resp.Header,
+	}, nil
+}
+
+func doUplinkMeasurement(maxSize int64, measureUntil time.Time) (*SpeedMeasurement, error) {
+	postURL := upURLTemplate
+	postBodyReader := InitSamplingReaderWriter(maxSize, measureUntil)
+
+	start := time.Now()
+
+	resp, err := http.Post(postURL, "application/octet-stream", postBodyReader)
+	if err != nil {
+		return nil, err
+	}
+
+	end := time.Now()
+
+	_, _, err = flushHTTPResponse(resp, 0, measureUntil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SpeedMeasurement{
+		Direction:      "up",
+		Size:           postBodyReader.SizeRead,
+		Start:          start,
+		End:            end,
+		Duration:       end.Sub(start),
+		IOSampler:      postBodyReader.IOSampler,
+		CFReqDur:       getCFReqDur(&resp.Header),
+		HTTPRespHeader: resp.Header,
+	}, nil
+}
+
+func doMeasureSpeed(measurementFunc func(_ int64, _ time.Time) (*SpeedMeasurement, error), measurementSizeMax int64) (*SpeedMeasurementStats, error) {
+	measurements := []*SpeedMeasurement{}
+
+	for measureUntil := time.Now().Add(speedMeasurementDuration); time.Since(measureUntil) < 0; {
+		measurement, err := measurementFunc(measurementSizeMax, measureUntil)
+		if err != nil {
+			break
+		}
+		measurements = append(measurements, measurement)
+	}
+
+	stats, totalSize, totalDuration := getSpeedMeasurementStats(measurements)
+
+	return &SpeedMeasurementStats{
+		NSamples: stats.NSamples,
+		TXSize:   totalSize,
+		Mean:     stats.Mean,
+		StdErr:   stats.StdErr,
+		Min:      stats.Min,
+		Max:      stats.Max,
+		Deciles:  stats.Deciles,
+		CatSpeed: float64(8*totalSize) / float64(totalDuration),
+	}, nil
+}
+
 func GetMeasurementMetadata() (*MeasurementMetadata, error) {
 	resp, err := http.Get(fmt.Sprintf(downURLTemplate, 0))
 	if err != nil {
 		return nil, err
 	}
-	_, _, err = flushHTTPResponse(resp)
+	_, _, err = flushHTTPResponse(resp, 0, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -80,8 +188,8 @@ func MeasureRTT() (*Stats, *Stats, error) {
 	durations := []time.Duration{}
 	cfReqDurs := []time.Duration{}
 
-	for start := time.Now(); time.Since(start) < rttMeasurementSoftTimeout; {
-		measurement, err := MeasureUplink(0)
+	for measureUntil := time.Now().Add(rttMeasurementDuration); time.Since(measureUntil) < 0; {
+		measurement, err := doUplinkMeasurement(0, time.Now())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -100,104 +208,10 @@ func MeasureRTT() (*Stats, *Stats, error) {
 	return getDurationStats(durations), getDurationStats(cfReqDurs), nil
 }
 
-func MeasureDownlink(size int64) (*SpeedMeasurement, error) {
-	getURL := fmt.Sprintf(downURLTemplate, size)
-
-	start := time.Now()
-
-	resp, err := http.Get(getURL)
-	if err != nil {
-		return nil, err
-	}
-	downloadedSize, ioSampler, err := flushHTTPResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	end := time.Now()
-
-	return &SpeedMeasurement{
-		Size:           downloadedSize,
-		Start:          start,
-		End:            end,
-		Duration:       end.Sub(start),
-		IOSampler:      *ioSampler,
-		HTTPRespHeader: resp.Header,
-	}, nil
+func MeasureDownlink() (*SpeedMeasurementStats, error) {
+	return doMeasureSpeed(doDownlinkMeasurement, downloadSizeMax)
 }
 
-func MeasureUplink(size int64) (*SpeedMeasurement, error) {
-	postURL := upURLTemplate
-	postBodyReader := InitReadSampler(size)
-
-	start := time.Now()
-
-	resp, err := http.Post(postURL, "application/octet-stream", postBodyReader)
-	if err != nil {
-		return nil, err
-	}
-
-	end := time.Now()
-
-	_, _, err = flushHTTPResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &SpeedMeasurement{
-		Size:           size,
-		Start:          start,
-		End:            end,
-		Duration:       end.Sub(start),
-		IOSampler:      postBodyReader.IOSampler,
-		HTTPRespHeader: resp.Header,
-	}, nil
-}
-
-func MeasureSpeedAdaptive(mode string, cfReqDurStats *Stats) (*SpeedMeasurementStats, error) {
-	measurements := []*SpeedMeasurement{}
-	cfReqDurs := []time.Duration{}
-	measurementBytes := adaptiveMeasurementBytesMin
-
-	measurementFunc := func(size int64) (*SpeedMeasurement, error) { return nil, fmt.Errorf("unknown mode %q", mode) }
-	switch mode {
-	case "down":
-		measurementFunc = MeasureDownlink
-	case "up":
-		measurementFunc = MeasureUplink
-	}
-
-	for len(measurements) < adaptiveMeasurementCount {
-		measurement, err := measurementFunc(measurementBytes)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(measurements) == 0 && measurement.Duration < adaptiveMeasurementTimeThreshold && measurementBytes < adaptiveMeasurementBytesMax && measurementBytes == measurement.Size {
-			measurements = []*SpeedMeasurement{}
-			measurementBytes *= adaptiveMeasurementExpBase
-		} else {
-			measurements = append(measurements, measurement)
-			cfReqDurs = append(cfReqDurs, getCFReqDur(&measurement.HTTPRespHeader))
-			measurementBytes = measurement.Size
-		}
-	}
-
-	if mode == "down" {
-		cfReqDurStats = getDurationStats(cfReqDurs)
-	}
-
-	catSpeed, stats := getSpeedMeasurementStats(measurements, cfReqDurStats)
-
-	return &SpeedMeasurementStats{
-		NSamples: stats.NSamples,
-		TXSize:   measurementBytes,
-		NTX:      len(measurements),
-		Mean:     stats.Mean,
-		StdErr:   stats.StdErr,
-		Min:      stats.Min,
-		Max:      stats.Max,
-		Deciles:  stats.Deciles,
-		CatSpeed: catSpeed,
-	}, nil
+func MeasureUplink() (*SpeedMeasurementStats, error) {
+	return doMeasureSpeed(doUplinkMeasurement, uploadSizeMax)
 }

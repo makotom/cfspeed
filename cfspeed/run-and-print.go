@@ -40,7 +40,7 @@ func printRTTMeasurement(printer *log.Logger, measurement *Stats) {
 	}
 }
 
-func printAdaptiveSpeedMeasurement(printer *log.Logger, label string, measurement *SpeedMeasurementStats) {
+func printSpeedMeasurement(printer *log.Logger, label string, measurement *SpeedMeasurementStats) {
 	if measurement != nil {
 		printer.Printf("%s-mean: %.3f Mbps\n", label, measurement.Mean)
 		printer.Printf("%s-stderr: %.3f Mbps\n", label, measurement.StdErr)
@@ -49,7 +49,6 @@ func printAdaptiveSpeedMeasurement(printer *log.Logger, label string, measuremen
 		printer.Printf("%s-deciles: %s Mbps\n", label, formatDeciles(measurement.Deciles))
 		printer.Printf("%s-cat: %.3f Mbps\n", label, measurement.CatSpeed)
 		printer.Printf("%s-tx: %.3f MiB\n", label, float64(measurement.TXSize)/1024/1024)
-		printer.Printf("%s-ntx: %d\n", label, measurement.NTX)
 		printer.Printf("%s-n: %d\n", label, measurement.NSamples)
 	}
 }
@@ -83,25 +82,25 @@ func RunAndPrint(printer *log.Logger, transportProtocol string) error {
 	printMetadata(printer, measurementMetadata)
 	printer.Println()
 
-	rttStats, cfReqDurStats, err := MeasureRTT()
+	rttStats, _, err := MeasureRTT()
 	if err != nil {
 		return errors.Wrap(err, "RTT measurement failed")
 	}
 	printRTTMeasurement(printer, rttStats)
 	printer.Println()
 
-	downlinkStats, err := MeasureSpeedAdaptive("down", cfReqDurStats)
+	downlinkStats, err := MeasureDownlink()
 	if err != nil {
 		return errors.Wrap(err, "downlink measurement failed")
 	}
-	printAdaptiveSpeedMeasurement(printer, "Downlink", downlinkStats)
+	printSpeedMeasurement(printer, "Downlink", downlinkStats)
 	printer.Println()
 
-	uplinkStats, err := MeasureSpeedAdaptive("up", cfReqDurStats)
+	uplinkStats, err := MeasureUplink()
 	if err != nil {
 		return errors.Wrap(err, "uplink measurement failed")
 	}
-	printAdaptiveSpeedMeasurement(printer, "Uplink", uplinkStats)
+	printSpeedMeasurement(printer, "Uplink", uplinkStats)
 
 	return nil
 }
