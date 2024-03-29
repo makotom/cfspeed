@@ -32,7 +32,7 @@ build_android() {
     goarch=$2
 
     # https://developer.android.com/ndk/downloads
-    ndk_label="android-ndk-r23b"
+    ndk_label="android-ndk-r26c"
     ndk_archive="${ndk_label}-linux.zip"
     ndk_checksum="f47ec4c4badd11e9f593a8450180884a927c330d"
     ndk_android_version="android31"
