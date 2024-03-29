@@ -34,8 +34,8 @@ build_android() {
     # https://developer.android.com/ndk/downloads
     ndk_label="android-ndk-r26c"
     ndk_archive="${ndk_label}-linux.zip"
-    ndk_checksum="f47ec4c4badd11e9f593a8450180884a927c330d"
-    ndk_android_version="android31"
+    ndk_checksum="7faebe2ebd3590518f326c82992603170f07c96e"
+    ndk_android_version="android34"
 
     if [[ ! -d "${ndk_label}" ]]; then
         curl -fJOL "https://dl.google.com/android/repository/${ndk_archive}"
