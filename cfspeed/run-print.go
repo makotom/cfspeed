@@ -33,14 +33,14 @@ func formatDeciles(deciles []float64) string {
 	return fmt.Sprintf("%v", numStrs)
 }
 
-func printRTTMeasurement(printer *log.Logger, measurement *Stats) {
+func printRTTMeasurement(printer *log.Logger, label string, measurement *Stats) {
 	if measurement != nil {
-		printer.Printf("RTT-mean: %.3f ms\n", measurement.Mean)
-		printer.Printf("RTT-stderr: %.3f ms\n", measurement.StdErr)
-		printer.Printf("RTT-min: %.3f ms\n", measurement.Min)
-		printer.Printf("RTT-max: %.3f ms\n", measurement.Max)
-		printer.Printf("RTT-deciles: %s ms\n", formatDeciles(measurement.Deciles))
-		printer.Printf("RTT-n: %d\n", measurement.NSamples)
+		printer.Printf("%s-mean: %.3f ms\n", label, measurement.Mean)
+		printer.Printf("%s-stderr: %.3f ms\n", label, measurement.StdErr)
+		printer.Printf("%s-min: %.3f ms\n", label, measurement.Min)
+		printer.Printf("%s-max: %.3f ms\n", label, measurement.Max)
+		printer.Printf("%s-deciles: %s ms\n", label, formatDeciles(measurement.Deciles))
+		printer.Printf("%s-n: %d\n", label, measurement.NSamples)
 	}
 }
 
@@ -56,6 +56,96 @@ func printSpeedMeasurement(printer *log.Logger, label string, measurement *Speed
 		printer.Printf("%s-mx: %d\n", label, measurement.Multiplicity)
 		printer.Printf("%s-n: %d\n", label, measurement.NSamples)
 	}
+}
+
+func runAndPrintMeasurementMetadata(printer *log.Logger) error {
+	measurementMetadata, err := GetMeasurementMetadata()
+
+	if err != nil {
+		return errors.Wrap(err, "could not fetch metadata")
+	}
+
+	printMetadata(printer, measurementMetadata)
+
+	return nil
+}
+
+func runAndPrintUnloadedRTTMeasurement(printer *log.Logger) error {
+	rttStats, _, err := MeasureRTT()
+
+	if err != nil {
+		return errors.Wrap(err, "RTT measurement failed")
+	}
+
+	printRTTMeasurement(printer, "RTT-Unloaded", rttStats)
+
+	return nil
+}
+
+func runAndPrintDownlinkMeasurement(printer *log.Logger, multiplicity int) error {
+	var dlStats *SpeedMeasurementStats
+	var dlLoadedRTTStats *Stats
+	var dlSpeedError error
+	var dlLoadedRTTErr error
+
+	dlLoadedRTTDone := make(chan bool)
+
+	go func() {
+		time.Sleep(1000 * time.Millisecond)
+		dlLoadedRTTStats, _, dlLoadedRTTErr = MeasureRTT()
+		dlLoadedRTTDone <- true
+	}()
+
+	if multiplicity > 0 {
+		dlStats, dlSpeedError = MeasureDownlinkMultiplexed(multiplicity)
+	} else {
+		dlStats, dlSpeedError = MeasureDownlink()
+	}
+	if dlSpeedError != nil {
+		return errors.Wrap(dlSpeedError, "downlink measurement failed")
+	}
+
+	printSpeedMeasurement(printer, "Downlink", dlStats)
+
+	if <-dlLoadedRTTDone && dlLoadedRTTErr == nil {
+		printer.Println()
+		printRTTMeasurement(printer, "RTT-DownlinkLoaded", dlLoadedRTTStats)
+	}
+
+	return nil
+}
+
+func runAndPrintUplinkMeasurement(printer *log.Logger, multiplicity int) error {
+	var ulStats *SpeedMeasurementStats
+	var ulLoadedRTTStats *Stats
+	var ulSpeedError error
+	var ulLoadedRTTErr error
+
+	ulLoadedRTTDone := make(chan bool)
+
+	go func() {
+		time.Sleep(1000 * time.Millisecond)
+		ulLoadedRTTStats, _, ulLoadedRTTErr = MeasureRTT()
+		ulLoadedRTTDone <- true
+	}()
+
+	if multiplicity > 0 {
+		ulStats, ulSpeedError = MeasureUplinkMultiplexed(multiplicity)
+	} else {
+		ulStats, ulSpeedError = MeasureUplink()
+	}
+	if ulSpeedError != nil {
+		return errors.Wrap(ulSpeedError, "uplink measurement failed")
+	}
+
+	printSpeedMeasurement(printer, "Uplink", ulStats)
+
+	if <-ulLoadedRTTDone && ulLoadedRTTErr == nil {
+		printer.Println()
+		printRTTMeasurement(printer, "RTT-UplinkLoaded", ulLoadedRTTStats)
+	}
+
+	return nil
 }
 
 func SetTransportProtocol(protocol string, dialTimeout time.Duration) {
@@ -80,42 +170,24 @@ func SetTransportProtocol(protocol string, dialTimeout time.Duration) {
 func RunAndPrint(printer *log.Logger, transportProtocol string, multiplicity int) error {
 	SetTransportProtocol(transportProtocol, defaultDialTimeout)
 
-	measurementMetadata, err := GetMeasurementMetadata()
-	if err != nil {
-		return errors.Wrap(err, "could not fetch metadata")
+	if err := runAndPrintMeasurementMetadata(printer); err != nil {
+		return err
 	}
-	printMetadata(printer, measurementMetadata)
 	printer.Println()
 
-	rttStats, _, err := MeasureRTT()
-	if err != nil {
-		return errors.Wrap(err, "RTT measurement failed")
+	if err := runAndPrintUnloadedRTTMeasurement(printer); err != nil {
+		return err
 	}
-	printRTTMeasurement(printer, rttStats)
 	printer.Println()
 
-	var downlinkStats, uplinkStats *SpeedMeasurementStats
-
-	if multiplicity > 0 {
-		downlinkStats, err = MeasureDownlinkMultiplexed(multiplicity)
-	} else {
-		downlinkStats, err = MeasureDownlink()
+	if err := runAndPrintDownlinkMeasurement(printer, multiplicity); err != nil {
+		return err
 	}
-	if err != nil {
-		return errors.Wrap(err, "downlink measurement failed")
-	}
-	printSpeedMeasurement(printer, "Downlink", downlinkStats)
 	printer.Println()
 
-	if multiplicity > 0 {
-		uplinkStats, err = MeasureUplinkMultiplexed(multiplicity)
-	} else {
-		uplinkStats, err = MeasureUplink()
+	if err := runAndPrintUplinkMeasurement(printer, multiplicity); err != nil {
+		return err
 	}
-	if err != nil {
-		return errors.Wrap(err, "uplink measurement failed")
-	}
-	printSpeedMeasurement(printer, "Uplink", uplinkStats)
 
 	return nil
 }
