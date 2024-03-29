@@ -59,7 +59,7 @@ func printSpeedMeasurement(printer *log.Logger, label string, measurement *Speed
 }
 
 func SetTransportProtocol(protocol string, dialTimeout time.Duration) {
-	// cf. https://go.googlesource.com/go/+/refs/tags/go1.22.1/src/net/http/transport.go#42
+	// cf. https://go.googlesource.com/go/+/refs/tags/go1.22.1/src/net/http/transport.go#43
 	// cf. https://go.googlesource.com/go/+/refs/tags/go1.22.1/src/net/http/transport.go#140
 	http.DefaultTransport = &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
