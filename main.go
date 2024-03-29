@@ -19,8 +19,9 @@ var (
 )
 
 type CmdOpts struct {
-	testIP4 bool
-	testIP6 bool
+	testIP4      bool
+	testIP6      bool
+	multiplicity int
 }
 
 func printTimestamp() {
@@ -39,22 +40,26 @@ func main() {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			printer.Printf(cmd.VersionTemplate())
 
+			if cmdOpts.multiplicity < 1 {
+				return fmt.Errorf(`invalid multiplicity "%d"; it needs to be a positive integer`, cmdOpts.multiplicity)
+			}
+
 			// if none specified, pick up a transport protocol automatically and then exit
 			if !cmdOpts.testIP4 && !cmdOpts.testIP6 {
 				printTimestamp()
-				return cfspeed.RunAndPrint(printer, "tcp")
+				return cfspeed.RunAndPrint(printer, "tcp", cmdOpts.multiplicity)
 			}
 
 			// these options are not mutually exclusive
 			if cmdOpts.testIP4 {
 				printTimestamp()
-				if err := cfspeed.RunAndPrint(printer, "tcp4"); err != nil {
+				if err := cfspeed.RunAndPrint(printer, "tcp4", cmdOpts.multiplicity); err != nil {
 					return err
 				}
 			}
 			if cmdOpts.testIP6 {
 				printTimestamp()
-				if err := cfspeed.RunAndPrint(printer, "tcp6"); err != nil {
+				if err := cfspeed.RunAndPrint(printer, "tcp6", cmdOpts.multiplicity); err != nil {
 					return err
 				}
 			}
@@ -67,6 +72,7 @@ func main() {
 
 	flags.BoolVarP(&cmdOpts.testIP4, "ip4", "4", false, "ensure measurements over IPv4")
 	flags.BoolVarP(&cmdOpts.testIP6, "ip6", "6", false, "ensure measurements over IPv6")
+	flags.IntVarP(&cmdOpts.multiplicity, "multiplicity", "m", 1, "multiplicity of measurements, must be a positive integer")
 
 	cmd.SetVersionTemplate(fmt.Sprintf("cfspeed %s (%s)\n", BuildName, BuildAnnotation))
 

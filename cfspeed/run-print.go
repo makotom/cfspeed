@@ -11,6 +11,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	defaultDialTimeout = 10 * time.Second
+)
+
 func printMetadata(printer *log.Logger, metadata *MeasurementMetadata) {
 	if metadata != nil {
 		printer.Printf("SrcIP: %s (AS%s)\n", metadata.SrcIP, metadata.SrcASN)
@@ -49,18 +53,19 @@ func printSpeedMeasurement(printer *log.Logger, label string, measurement *Speed
 		printer.Printf("%s-deciles: %s Mbps\n", label, formatDeciles(measurement.Deciles))
 		printer.Printf("%s-cat: %.3f Mbps\n", label, measurement.CatSpeed)
 		printer.Printf("%s-tx: %.3f MiB\n", label, float64(measurement.TXSize)/1024/1024)
+		printer.Printf("%s-mx: %d\n", label, measurement.Multiplicity)
 		printer.Printf("%s-n: %d\n", label, measurement.NSamples)
 	}
 }
 
-func SetTransportProtocol(protocol string) {
-	// cf. https://go.googlesource.com/go/+/refs/tags/go1.16.6/src/net/http/transport.go#42
-	// cf. https://go.googlesource.com/go/+/refs/tags/go1.16.6/src/net/http/transport.go#130
+func SetTransportProtocol(protocol string, dialTimeout time.Duration) {
+	// cf. https://go.googlesource.com/go/+/refs/tags/go1.22.1/src/net/http/transport.go#42
+	// cf. https://go.googlesource.com/go/+/refs/tags/go1.22.1/src/net/http/transport.go#140
 	http.DefaultTransport = &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
 			return (&net.Dialer{
-				Timeout:   10 * time.Second,
+				Timeout:   dialTimeout,
 				KeepAlive: 30 * time.Second,
 			}).DialContext(ctx, protocol, addr)
 		},
@@ -72,8 +77,8 @@ func SetTransportProtocol(protocol string) {
 	}
 }
 
-func RunAndPrint(printer *log.Logger, transportProtocol string) error {
-	SetTransportProtocol(transportProtocol)
+func RunAndPrint(printer *log.Logger, transportProtocol string, multiplicity int) error {
+	SetTransportProtocol(transportProtocol, defaultDialTimeout)
 
 	measurementMetadata, err := GetMeasurementMetadata()
 	if err != nil {
@@ -89,14 +94,24 @@ func RunAndPrint(printer *log.Logger, transportProtocol string) error {
 	printRTTMeasurement(printer, rttStats)
 	printer.Println()
 
-	downlinkStats, err := MeasureDownlink()
+	var downlinkStats, uplinkStats *SpeedMeasurementStats
+
+	if multiplicity > 0 {
+		downlinkStats, err = MeasureDownlinkMultiplexed(multiplicity)
+	} else {
+		downlinkStats, err = MeasureDownlink()
+	}
 	if err != nil {
 		return errors.Wrap(err, "downlink measurement failed")
 	}
 	printSpeedMeasurement(printer, "Downlink", downlinkStats)
 	printer.Println()
 
-	uplinkStats, err := MeasureUplink()
+	if multiplicity > 0 {
+		uplinkStats, err = MeasureUplinkMultiplexed(multiplicity)
+	} else {
+		uplinkStats, err = MeasureUplink()
+	}
 	if err != nil {
 		return errors.Wrap(err, "uplink measurement failed")
 	}

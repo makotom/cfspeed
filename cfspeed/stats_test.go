@@ -10,7 +10,7 @@ import (
 func TestGetStats_11Samples(t *testing.T) {
 	samples := []float64{0.0, -0.5, 0.5, -1.0, 1.0, -1.5, 1.5, -2.0, 2.0, -2.5, 2.5}
 
-	stats := getStats(samples)
+	stats := getF64Stats(samples)
 
 	assert.Equal(t, stats.NSamples, 11)
 	assert.Equal(t, stats.Mean, 0.0)
@@ -26,7 +26,7 @@ func TestGetStats_11Samples(t *testing.T) {
 func TestGetStats_6Samples(t *testing.T) {
 	samples := []float64{-2.0, -3.0, 0.0, 2.0, -1.0, 1.0}
 
-	stats := getStats(samples)
+	stats := getF64Stats(samples)
 
 	assert.Equal(t, stats.NSamples, 6)
 	assert.Equal(t, stats.Mean, -0.5)
@@ -42,7 +42,7 @@ func TestGetStats_6Samples(t *testing.T) {
 func TestGetStats_25Samples(t *testing.T) {
 	samples := []float64{127, 19, 139, 34, 134, 236, 221, 61, 146, 151, 157, 45, 137, 231, 46, 61, 215, 29, 189, 42, 108, 174, 235, 79, 167}
 
-	stats := getStats(samples)
+	stats := getF64Stats(samples)
 
 	assert.Equal(t, stats.NSamples, 25)
 	assert.Equal(t, stats.Mean, 127.31999999999996)
@@ -62,7 +62,7 @@ func TestGetDurationStats(t *testing.T) {
 		samples = append(samples, time.Duration(durationMS*1000*1000))
 	}
 
-	stats := getDurationStats(samples)
+	stats := getDurationMSStats(samples)
 
 	assert.Equal(t, stats.NSamples, 25)
 	assert.Equal(t, stats.Mean, 127.31999999999996)

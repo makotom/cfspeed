@@ -20,7 +20,22 @@ type Stats struct {
 	Deciles  []float64
 }
 
-func getMean(series []float64) float64 {
+type Sample[T any] struct {
+	Value     T
+	Timestamp time.Time
+}
+
+func sumF64s(values []float64) float64 {
+	ret := float64(0)
+
+	for _, value := range values {
+		ret += value
+	}
+
+	return ret
+}
+
+func getF64Mean(series []float64) float64 {
 	ret := float64(0)
 	nSamplesF64 := float64(len(series))
 
@@ -31,7 +46,7 @@ func getMean(series []float64) float64 {
 	return ret
 }
 
-func getSquareMean(series []float64) float64 {
+func getF64SquareMean(series []float64) float64 {
 	ret := float64(0)
 	nSamplesF64 := float64(len(series))
 
@@ -42,11 +57,11 @@ func getSquareMean(series []float64) float64 {
 	return ret
 }
 
-func getStdDevUsingMean(series []float64, mean float64) float64 {
-	return math.Sqrt(getSquareMean(series) - (mean * mean))
+func getF64StdDevUsingMean(series []float64, mean float64) float64 {
+	return math.Sqrt(getF64SquareMean(series) - (mean * mean))
 }
 
-func getDeciles(series []float64) []float64 {
+func getF64Deciles(series []float64) []float64 {
 	ret := make([]float64, 9)
 	sorted := make([]float64, len(series))
 	elemsPerStep := float64(len(series)-1) / 10
@@ -68,7 +83,7 @@ func getDeciles(series []float64) []float64 {
 	return ret
 }
 
-func getStats(series []float64) *Stats {
+func getF64Stats(series []float64) *Stats {
 	ret := &Stats{
 		Min:      math.Inf(1),
 		Max:      math.Inf(-1),
@@ -88,26 +103,15 @@ func getStats(series []float64) *Stats {
 	}
 
 	ret.NSamples = len(series)
-	ret.Mean = getMean(series)
-	ret.StdDev = getStdDevUsingMean(series, ret.Mean)
+	ret.Mean = getF64Mean(series)
+	ret.StdDev = getF64StdDevUsingMean(series, ret.Mean)
 	ret.StdErr = ret.StdDev / math.Sqrt(float64(len(series)))
-	ret.Deciles = getDeciles(series)
+	ret.Deciles = getF64Deciles(series)
 
 	return ret
 }
 
-func getReversedIOEvents(ioEvents []*IOEvent) []*IOEvent {
-	ret := []*IOEvent{}
-	seriesLen := len(ioEvents)
-
-	for iter := 0; iter < seriesLen; iter += 1 {
-		ret = append(ret, ioEvents[seriesLen-1-iter])
-	}
-
-	return ret
-}
-
-func reverseF64sInPlace(series []float64) {
+func reverseValueSamplesInPlace[T any](series []*Sample[T]) {
 	seriesLen := len(series)
 	halfLen := seriesLen / 2
 
@@ -116,25 +120,56 @@ func reverseF64sInPlace(series []float64) {
 	}
 }
 
-func getIOLatencyStats(ioEvents []*IOEvent) *Stats {
-	latencies := []time.Duration{}
+func getValuesFromSamples[T any](samples []*Sample[T]) []T {
+	ret := make([]T, len(samples))
 
-	for index, event := range ioEvents[1:] {
-		latencies = append(latencies, event.Timestamp.Sub(ioEvents[index].Timestamp))
+	for index, sample := range samples {
+		ret[index] = sample.Value
 	}
 
-	return getDurationStats(latencies)
+	return ret
 }
 
-func getIOReadMBPSSamples(_, end time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []float64 {
-	mbpsSamples := []float64{}
+func getDurationMSStats(durations []time.Duration) *Stats {
+	durationSamples := make([]float64, len(durations))
 
-	ioLatencyStats := getIOLatencyStats(ioEvents)
-	samplingBoundaryLatencyThreshold := ioLatencyStats.Mean + 2*ioLatencyStats.StdDev
+	for index, duration := range durations {
+		durationMSF64 := float64(duration.Nanoseconds()) / 1000 / 1000
+		durationSamples[index] = durationMSF64
+	}
+
+	return getF64Stats(durationSamples)
+}
+
+func getIOLatencyMSStats(ioEvents []*IOEvent) *Stats {
+	latencies := make([]time.Duration, len(ioEvents)-1)
+
+	for index, event := range ioEvents[1:] {
+		latencies[index] = event.Timestamp.Sub(ioEvents[index].Timestamp)
+	}
+
+	return getDurationMSStats(latencies)
+}
+
+func getReversedIOEvents(ioEvents []*IOEvent) []*IOEvent {
+	ret := make([]*IOEvent, len(ioEvents))
+	seriesLen := len(ioEvents)
+
+	for iter := 0; iter < seriesLen; iter += 1 {
+		ret[iter] = ioEvents[seriesLen-1-iter]
+	}
+
+	return ret
+}
+func getIOReadMBPSSamples(_, end time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []*Sample[float64] {
+	mbpsSamples := []*Sample[float64]{}
+
+	ioLatencyMSStats := getIOLatencyMSStats(ioEvents)
+	inferredUnbufferedIOThreshold := ioLatencyMSStats.Mean + 2*ioLatencyMSStats.StdDev
 
 	ioEventsToAnalyse := ioEvents
 	adjustedEndTime := end.Add(-cfReqDur)
-	if adjustedEndTime.Sub(ioEvents[len(ioEvents)-1].Timestamp) > 0 {
+	if adjustedEndTime.Compare(ioEvents[len(ioEvents)-1].Timestamp) > 0 {
 		ioEventsToAnalyse = append(ioEvents, &IOEvent{
 			Timestamp: adjustedEndTime,
 			Mode:      "read",
@@ -148,8 +183,11 @@ func getIOReadMBPSSamples(_, end time.Time, cfReqDur time.Duration, ioEvents []*
 		sizeSum += ioEventsToAnalyse[index].Size
 
 		sinceStart := event.Timestamp.Sub(windowStart)
-		if float64(event.Timestamp.Sub(ioEventsToAnalyse[index].Timestamp).Milliseconds()) > samplingBoundaryLatencyThreshold && sinceStart > ioSamplingWindowWidthMin {
-			mbpsSamples = append(mbpsSamples, float64(8*sizeSum)/float64(sinceStart.Microseconds()))
+		if float64(event.Timestamp.Sub(ioEventsToAnalyse[index].Timestamp).Milliseconds()) > inferredUnbufferedIOThreshold && sinceStart > ioSamplingWindowWidthMin {
+			mbpsSamples = append(mbpsSamples, &Sample[float64]{
+				Value:     float64(8*sizeSum) / float64(sinceStart.Microseconds()),
+				Timestamp: event.Timestamp,
+			})
 
 			windowStart = event.Timestamp
 			sizeSum = 0
@@ -159,15 +197,15 @@ func getIOReadMBPSSamples(_, end time.Time, cfReqDur time.Duration, ioEvents []*
 	return mbpsSamples
 }
 
-func getIOWriteMBPSSamples(start, _ time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []float64 {
-	mbpsSamples := []float64{}
+func getIOWriteMBPSSamples(start, _ time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []*Sample[float64] {
+	mbpsSamples := []*Sample[float64]{}
 
-	ioLatencyStats := getIOLatencyStats(ioEvents)
-	samplingBoundaryLatencyThreshold := ioLatencyStats.Mean + 2*ioLatencyStats.StdDev
+	ioLatencyMSStats := getIOLatencyMSStats(ioEvents)
+	inferredUnbufferedIOThreshold := ioLatencyMSStats.Mean + 2*ioLatencyMSStats.StdDev
 
 	ioEventsToAnalyse := getReversedIOEvents(ioEvents)
 	adjustedStartTime := start.Add(cfReqDur)
-	if ioEvents[0].Timestamp.Sub(adjustedStartTime) > 0 {
+	if ioEvents[0].Timestamp.Compare(adjustedStartTime) > 0 {
 		ioEventsToAnalyse = append(ioEventsToAnalyse, &IOEvent{
 			Timestamp: adjustedStartTime,
 			Mode:      "write",
@@ -181,43 +219,35 @@ func getIOWriteMBPSSamples(start, _ time.Time, cfReqDur time.Duration, ioEvents 
 		sizeSum += ioEventsToAnalyse[index].Size
 
 		sinceStart := windowStart.Sub(event.Timestamp)
-		if float64(ioEventsToAnalyse[index].Timestamp.Sub(event.Timestamp).Milliseconds()) > samplingBoundaryLatencyThreshold && sinceStart > ioSamplingWindowWidthMin {
-			mbpsSamples = append(mbpsSamples, float64(8*sizeSum)/float64(sinceStart.Microseconds()))
+		if float64(ioEventsToAnalyse[index].Timestamp.Sub(event.Timestamp).Milliseconds()) > inferredUnbufferedIOThreshold && sinceStart > ioSamplingWindowWidthMin {
+			mbpsSamples = append(mbpsSamples, &Sample[float64]{
+				Value:     float64(8*sizeSum) / float64(sinceStart.Microseconds()),
+				Timestamp: windowStart,
+			})
 
 			windowStart = event.Timestamp
 			sizeSum = 0
 		}
 	}
 
-	reverseF64sInPlace(mbpsSamples)
+	reverseValueSamplesInPlace(mbpsSamples)
 
 	return mbpsSamples
 }
 
-func getMBPSSamplesFromMeasurement(measurement *SpeedMeasurement) []float64 {
+func getMBPSSamplesFromMeasurement(measurement *SpeedMeasurement) []*Sample[float64] {
 	switch measurement.Direction {
-	case "down":
+	case DirectionDownlink:
 		return getIOWriteMBPSSamples(measurement.Start, measurement.End, measurement.CFReqDur, measurement.IOSampler.Events)
-	case "up":
+	case DirectionUplink:
 		return getIOReadMBPSSamples(measurement.Start, measurement.End, measurement.CFReqDur, measurement.IOSampler.Events)
 	default:
-		return []float64{}
+		return []*Sample[float64]{}
 	}
 }
 
-func getDurationStats(durations []time.Duration) *Stats {
-	durationSamples := []float64{}
-
-	for _, duration := range durations {
-		durationMSF64 := float64(duration.Nanoseconds()) / 1000 / 1000
-		durationSamples = append(durationSamples, durationMSF64)
-	}
-
-	return getStats(durationSamples)
-}
-
-func getSpeedMeasurementStats(measurements []*SpeedMeasurement) (*Stats, int64, int64) {
-	mbpsSamples := []float64{}
+func analyseMeasurements(measurements []*SpeedMeasurement) ([]*Sample[float64], int64, int64) {
+	mbpsSamples := []*Sample[float64]{}
 	sizeSum := int64(0)
 	durationSum := int64(0)
 
@@ -227,5 +257,88 @@ func getSpeedMeasurementStats(measurements []*SpeedMeasurement) (*Stats, int64, 
 		durationSum += measurement.Duration.Microseconds()
 	}
 
-	return getStats(mbpsSamples), sizeSum, durationSum
+	return mbpsSamples, sizeSum, durationSum
+}
+
+func chooseGroupWithYoungestHead(groupedMBPSSamples [][]*Sample[float64], groupHead []int) int {
+	youngestGroup := -1
+
+	youngestTimestamp := time.Time{}
+
+	for index := range groupHead {
+		if groupHead[index] > -1 {
+			if groupedMBPSSamples[index][groupHead[index]].Timestamp.Compare(youngestTimestamp) > 0 {
+				youngestGroup = index
+				youngestTimestamp = groupedMBPSSamples[index][groupHead[index]].Timestamp
+			}
+		}
+	}
+
+	return youngestGroup
+}
+
+func consolidateGroupedMBPSSamples(groupedMBPSSamples [][]*Sample[float64]) []*Sample[float64] {
+	nGroups := len(groupedMBPSSamples)
+
+	mergedMBPSSamples := []*Sample[float64]{}
+	curGroupMBPS := make([]float64, nGroups)
+	curGroupHead := make([]int, nGroups)
+
+	for iter := 0; iter < nGroups; iter += 1 {
+		curGroupHead[iter] = len(groupedMBPSSamples[iter]) - 1
+	}
+
+	for {
+		youngestGroup := chooseGroupWithYoungestHead(groupedMBPSSamples, curGroupHead)
+		if youngestGroup < 0 {
+			break
+		}
+
+		youngestSample := groupedMBPSSamples[youngestGroup][curGroupHead[youngestGroup]]
+		curGroupMBPS[youngestGroup] = youngestSample.Value
+		mergedMBPSSamples = append(mergedMBPSSamples, &Sample[float64]{
+			Value:     sumF64s(curGroupMBPS),
+			Timestamp: youngestSample.Timestamp,
+		})
+
+		curGroupHead[youngestGroup] -= 1
+	}
+
+	return mergedMBPSSamples
+}
+
+func analyseMeasurementGroups(measurementGroups [][]*SpeedMeasurement) ([]*Sample[float64], int64, int64) {
+	sizeSum := int64(0)
+
+	groupedMBPSSamples := make([][]*Sample[float64], len(measurementGroups))
+	firstStart := time.Unix(1<<62-1, 1<<62-1)
+	lastEnd := time.Time{}
+
+	for index, measurements := range measurementGroups {
+		groupMBPSSamples, groupSizeSum, _ := analyseMeasurements(measurements)
+		groupedMBPSSamples[index] = groupMBPSSamples
+		sizeSum += groupSizeSum
+
+		firstMeasurement := measurements[0]
+		if firstMeasurement.Start.Compare(firstStart) < 0 {
+			firstStart = firstMeasurement.Start
+		}
+
+		lastMeasurement := measurements[len(measurements)-1]
+		if lastMeasurement.End.Compare(lastEnd) > 0 {
+			lastEnd = lastMeasurement.End
+		}
+	}
+
+	return consolidateGroupedMBPSSamples(groupedMBPSSamples), sizeSum, lastEnd.Sub(firstStart).Microseconds()
+}
+
+func getSingleSpeedMeasurementStats(measurements []*SpeedMeasurement) (*Stats, int64, int64) {
+	mbpsSamples, sizeSum, durationSum := analyseMeasurements(measurements)
+	return getF64Stats(getValuesFromSamples(mbpsSamples)), sizeSum, durationSum
+}
+
+func getMultiplexedSpeedMeasurementStats(measurementGroups [][]*SpeedMeasurement) (*Stats, int64, int64) {
+	mbpsSamples, sizeSum, longestSpan := analyseMeasurementGroups(measurementGroups)
+	return getF64Stats(getValuesFromSamples(mbpsSamples)), sizeSum, longestSpan
 }

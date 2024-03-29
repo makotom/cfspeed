@@ -10,6 +10,9 @@ import (
 )
 
 const (
+	DirectionDownlink = "down"
+	DirectionUplink   = "up"
+
 	downURLTemplate = "https://speed.cloudflare.com/__down?bytes=%d"
 	upURLTemplate   = "https://speed.cloudflare.com/__up"
 
@@ -39,14 +42,15 @@ type SpeedMeasurement struct {
 }
 
 type SpeedMeasurementStats struct {
-	NSamples int
-	TXSize   int64
-	Mean     float64
-	StdErr   float64
-	Min      float64
-	Max      float64
-	Deciles  []float64
-	CatSpeed float64
+	NSamples     int
+	TXSize       int64
+	Multiplicity int
+	Mean         float64
+	StdErr       float64
+	Min          float64
+	Max          float64
+	Deciles      []float64
+	CatSpeed     float64
 }
 
 func flushHTTPResponse(resp *http.Response, maxSize int64, flushUntil time.Time) (int64, *IOSampler, error) {
@@ -89,7 +93,7 @@ func doDownlinkMeasurement(maxSize int64, measureUntil time.Time) (*SpeedMeasure
 	end := time.Now()
 
 	return &SpeedMeasurement{
-		Direction:      "down",
+		Direction:      DirectionDownlink,
 		Size:           downloadedSize,
 		Start:          start,
 		End:            end,
@@ -119,7 +123,7 @@ func doUplinkMeasurement(maxSize int64, measureUntil time.Time) (*SpeedMeasureme
 	}
 
 	return &SpeedMeasurement{
-		Direction:      "up",
+		Direction:      DirectionUplink,
 		Size:           postBodyReader.SizeRead,
 		Start:          start,
 		End:            end,
@@ -130,28 +134,70 @@ func doUplinkMeasurement(maxSize int64, measureUntil time.Time) (*SpeedMeasureme
 	}, nil
 }
 
-func doMeasureSpeed(measurementFunc func(_ int64, _ time.Time) (*SpeedMeasurement, error), measurementSizeMax int64) (*SpeedMeasurementStats, error) {
+func doMeasureSpeed(measurementFunc func(_ int64, _ time.Time) (*SpeedMeasurement, error), txSizeMax int64) ([]*SpeedMeasurement, error) {
 	measurements := []*SpeedMeasurement{}
+	var err error = nil
 
 	for measureUntil := time.Now().Add(speedMeasurementDuration); time.Since(measureUntil) < 0; {
-		measurement, err := measurementFunc(measurementSizeMax, measureUntil)
+		measurement, err := measurementFunc(txSizeMax, measureUntil)
 		if err != nil {
 			break
 		}
 		measurements = append(measurements, measurement)
 	}
 
-	stats, totalSize, totalDuration := getSpeedMeasurementStats(measurements)
+	return measurements, err
+}
+
+func measureSpeedSingle(measurementFunc func(_ int64, _ time.Time) (*SpeedMeasurement, error), txSizeMax int64) (*SpeedMeasurementStats, error) {
+	measurements, err := doMeasureSpeed(measurementFunc, txSizeMax)
+	stats, totalSize, totalDuration := getSingleSpeedMeasurementStats(measurements)
 
 	return &SpeedMeasurementStats{
-		NSamples: stats.NSamples,
-		TXSize:   totalSize,
-		Mean:     stats.Mean,
-		StdErr:   stats.StdErr,
-		Min:      stats.Min,
-		Max:      stats.Max,
-		Deciles:  stats.Deciles,
-		CatSpeed: float64(8*totalSize) / float64(totalDuration),
+		NSamples:     stats.NSamples,
+		TXSize:       totalSize,
+		Multiplicity: 1,
+		Mean:         stats.Mean,
+		StdErr:       stats.StdErr,
+		Min:          stats.Min,
+		Max:          stats.Max,
+		Deciles:      stats.Deciles,
+		CatSpeed:     float64(8*totalSize) / float64(totalDuration),
+	}, err
+}
+
+func measureSpeedMultiplexed(measurementFunc func(_ int64, _ time.Time) (*SpeedMeasurement, error), txSizeMax int64, multiplicity int) (*SpeedMeasurementStats, error) {
+	groupedMeasurements := make([][]*SpeedMeasurement, multiplicity)
+	groupsCompleted := 0
+	chanCompleted := make(chan error)
+
+	for iter := 0; iter < multiplicity; iter += 1 {
+		group := iter
+		go func() {
+			measurements, err := doMeasureSpeed(measurementFunc, txSizeMax)
+			groupedMeasurements[group] = measurements
+			chanCompleted <- err
+		}()
+	}
+
+	for ; groupsCompleted < multiplicity; groupsCompleted += 1 {
+		if err := <-chanCompleted; err != nil {
+			return nil, err
+		}
+	}
+
+	stats, totalSize, longestSpan := getMultiplexedSpeedMeasurementStats(groupedMeasurements)
+
+	return &SpeedMeasurementStats{
+		NSamples:     stats.NSamples,
+		TXSize:       totalSize,
+		Multiplicity: multiplicity,
+		Mean:         stats.Mean,
+		StdErr:       stats.StdErr,
+		Min:          stats.Min,
+		Max:          stats.Max,
+		Deciles:      stats.Deciles,
+		CatSpeed:     float64(8*totalSize) / float64(longestSpan),
 	}, nil
 }
 
@@ -205,13 +251,21 @@ func MeasureRTT() (*Stats, *Stats, error) {
 		durations = append(durations, adjustedDuration)
 	}
 
-	return getDurationStats(durations), getDurationStats(cfReqDurs), nil
+	return getDurationMSStats(durations), getDurationMSStats(cfReqDurs), nil
 }
 
 func MeasureDownlink() (*SpeedMeasurementStats, error) {
-	return doMeasureSpeed(doDownlinkMeasurement, downloadSizeMax)
+	return measureSpeedSingle(doDownlinkMeasurement, downloadSizeMax)
+}
+
+func MeasureDownlinkMultiplexed(multiplicity int) (*SpeedMeasurementStats, error) {
+	return measureSpeedMultiplexed(doDownlinkMeasurement, downloadSizeMax, multiplicity)
 }
 
 func MeasureUplink() (*SpeedMeasurementStats, error) {
-	return doMeasureSpeed(doUplinkMeasurement, uploadSizeMax)
+	return measureSpeedSingle(doUplinkMeasurement, uploadSizeMax)
+}
+
+func MeasureUplinkMultiplexed(multiplicity int) (*SpeedMeasurementStats, error) {
+	return measureSpeedMultiplexed(doUplinkMeasurement, uploadSizeMax, multiplicity)
 }
