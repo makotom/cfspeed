@@ -3,7 +3,7 @@ version: 2.1
 executors:
   go:
     docker:
-      - image: golang:1.18
+      - image: golang:1.22
     resource_class: medium
   ubuntu-docker:
     docker:
