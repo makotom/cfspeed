@@ -97,8 +97,8 @@ jobs:
           name: Show help message
           command: ./cfspeed --help
       - run:
-          name: Run a normal test
-          command: ./cfspeed
+          name: Run with multiplicity at 8
+          command: ./cfspeed -m 8
 
   release:
     executor: ubuntu-docker
