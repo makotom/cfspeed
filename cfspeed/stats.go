@@ -6,7 +6,9 @@ import (
 	"time"
 )
 
-const ioSamplingWindowWidthMin = 200 * time.Millisecond
+const (
+	ioSamplingWindowWidthMin = 100 * time.Millisecond
+)
 
 type Stats struct {
 	NSamples int
@@ -164,27 +166,27 @@ func getReversedIOEvents(ioEvents []*IOEvent) []*IOEvent {
 func getIOReadMBPSSamples(_, end time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []*Sample[float64] {
 	mbpsSamples := []*Sample[float64]{}
 
-	ioLatencyMSStats := getIOLatencyMSStats(ioEvents)
-	inferredUnbufferedIOThreshold := ioLatencyMSStats.Mean + 2*ioLatencyMSStats.StdDev
-
 	ioEventsToAnalyse := ioEvents
 	adjustedEndTime := end.Add(-cfReqDur)
 	if adjustedEndTime.Compare(ioEvents[len(ioEvents)-1].Timestamp) > 0 {
 		ioEventsToAnalyse = append(ioEvents, &IOEvent{
 			Timestamp: adjustedEndTime,
-			Mode:      "read",
+			Mode:      IOModeRead,
 			Size:      0,
 		})
 	}
 
+	ioLatencyMSStats := getIOLatencyMSStats(ioEventsToAnalyse)
+	inferredUnbufferedIOThreshold := ioLatencyMSStats.Mean + 2*ioLatencyMSStats.StdDev
+
 	windowStart := ioEventsToAnalyse[0].Timestamp
-	lastIndex := len(ioEventsToAnalyse) - 1
+	lastIndexForFor := len(ioEventsToAnalyse) - 1 - 1
 	sizeSum := 0
 	for index, event := range ioEventsToAnalyse[1:] {
 		sizeSum += ioEventsToAnalyse[index].Size
 
 		sinceStart := event.Timestamp.Sub(windowStart)
-		if (float64(event.Timestamp.Sub(ioEventsToAnalyse[index].Timestamp).Milliseconds()) > inferredUnbufferedIOThreshold && sinceStart > ioSamplingWindowWidthMin) || index == lastIndex {
+		if (float64(event.Timestamp.Sub(ioEventsToAnalyse[index].Timestamp).Milliseconds()) > inferredUnbufferedIOThreshold && sinceStart > ioSamplingWindowWidthMin) || index == lastIndexForFor {
 			mbpsSamples = append(mbpsSamples, &Sample[float64]{
 				Value:     float64(8*sizeSum) / float64(sinceStart.Microseconds()),
 				Timestamp: event.Timestamp,
@@ -201,27 +203,27 @@ func getIOReadMBPSSamples(_, end time.Time, cfReqDur time.Duration, ioEvents []*
 func getIOWriteMBPSSamples(start, _ time.Time, cfReqDur time.Duration, ioEvents []*IOEvent) []*Sample[float64] {
 	mbpsSamples := []*Sample[float64]{}
 
-	ioLatencyMSStats := getIOLatencyMSStats(ioEvents)
-	inferredUnbufferedIOThreshold := ioLatencyMSStats.Mean + 2*ioLatencyMSStats.StdDev
-
 	ioEventsToAnalyse := getReversedIOEvents(ioEvents)
 	adjustedStartTime := start.Add(cfReqDur)
 	if ioEvents[0].Timestamp.Compare(adjustedStartTime) > 0 {
 		ioEventsToAnalyse = append(ioEventsToAnalyse, &IOEvent{
 			Timestamp: adjustedStartTime,
-			Mode:      "write",
+			Mode:      IOModeWrite,
 			Size:      0,
 		})
 	}
 
+	ioLatencyMSStats := getIOLatencyMSStats(ioEventsToAnalyse)
+	inferredUnbufferedIOThreshold := math.Abs(ioLatencyMSStats.Mean) + 2*ioLatencyMSStats.StdDev
+
 	windowStart := ioEventsToAnalyse[0].Timestamp
-	lastIndex := len(ioEventsToAnalyse) - 1
+	lastIndexForFor := len(ioEventsToAnalyse) - 1 - 1
 	sizeSum := 0
 	for index, event := range ioEventsToAnalyse[1:] {
 		sizeSum += ioEventsToAnalyse[index].Size
 
 		sinceStart := windowStart.Sub(event.Timestamp)
-		if (float64(ioEventsToAnalyse[index].Timestamp.Sub(event.Timestamp).Milliseconds()) > inferredUnbufferedIOThreshold && sinceStart > ioSamplingWindowWidthMin) || index == lastIndex {
+		if (float64(ioEventsToAnalyse[index].Timestamp.Sub(event.Timestamp).Milliseconds()) > inferredUnbufferedIOThreshold && sinceStart > ioSamplingWindowWidthMin) || index == lastIndexForFor {
 			mbpsSamples = append(mbpsSamples, &Sample[float64]{
 				Value:     float64(8*sizeSum) / float64(sinceStart.Microseconds()),
 				Timestamp: windowStart,
@@ -295,6 +297,8 @@ func consolidateGroupedMBPSSamples(groupedMBPSSamples [][]*Sample[float64]) []*S
 
 		curGroupHead[youngestGroup] -= 1
 	}
+
+	reverseValueSamplesInPlace[float64](mergedMBPSSamples)
 
 	return mergedMBPSSamples
 }

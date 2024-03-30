@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+const (
+	IOModeRead  = "read"
+	IOModeWrite = "write"
+)
+
 type IOEvent struct {
 	Timestamp time.Time
 	Mode      string
@@ -38,7 +43,7 @@ func (r *SamplingReaderWriter) Read(p []byte) (int, error) {
 
 	r.Events = append(r.Events, &IOEvent{
 		Timestamp: time.Now(),
-		Mode:      "read",
+		Mode:      IOModeRead,
 		Size:      size,
 	})
 	r.SizeRead += int64(size)
@@ -51,7 +56,7 @@ func (w *SamplingReaderWriter) Write(p []byte) (int, error) {
 
 	w.Events = append(w.Events, &IOEvent{
 		Timestamp: time.Now(),
-		Mode:      "write",
+		Mode:      IOModeWrite,
 		Size:      size,
 	})
 	w.SizeWritten = int64(size)
