@@ -82,7 +82,7 @@ func runAndPrintUnloadedRTTMeasurement(printer *log.Logger) error {
 	return nil
 }
 
-func runAndPrintDownlinkMeasurement(printer *log.Logger, multiplicity int) error {
+func runAndPrintDownlinkMeasurement(printer *log.Logger, multiplicity int, measureLoadedRTT bool) error {
 	var dlStats *SpeedMeasurementStats
 	var dlLoadedRTTStats *Stats
 	var dlSpeedError error
@@ -90,11 +90,13 @@ func runAndPrintDownlinkMeasurement(printer *log.Logger, multiplicity int) error
 
 	dlLoadedRTTDone := make(chan bool)
 
-	go func() {
-		time.Sleep(1000 * time.Millisecond)
-		dlLoadedRTTStats, _, dlLoadedRTTErr = MeasureRTT()
-		dlLoadedRTTDone <- true
-	}()
+	if measureLoadedRTT {
+		go func() {
+			time.Sleep(1000 * time.Millisecond)
+			dlLoadedRTTStats, _, dlLoadedRTTErr = MeasureRTT()
+			dlLoadedRTTDone <- true
+		}()
+	}
 
 	if multiplicity > 0 {
 		dlStats, dlSpeedError = MeasureDownlinkMultiplexed(multiplicity)
@@ -107,7 +109,7 @@ func runAndPrintDownlinkMeasurement(printer *log.Logger, multiplicity int) error
 
 	printSpeedMeasurement(printer, "Downlink", dlStats)
 
-	if <-dlLoadedRTTDone && dlLoadedRTTErr == nil {
+	if measureLoadedRTT && <-dlLoadedRTTDone && dlLoadedRTTErr == nil {
 		printer.Println()
 		printRTTMeasurement(printer, "RTT-DownlinkLoaded", dlLoadedRTTStats)
 	}
@@ -115,7 +117,7 @@ func runAndPrintDownlinkMeasurement(printer *log.Logger, multiplicity int) error
 	return nil
 }
 
-func runAndPrintUplinkMeasurement(printer *log.Logger, multiplicity int) error {
+func runAndPrintUplinkMeasurement(printer *log.Logger, multiplicity int, measureLoadedRTT bool) error {
 	var ulStats *SpeedMeasurementStats
 	var ulLoadedRTTStats *Stats
 	var ulSpeedError error
@@ -123,11 +125,13 @@ func runAndPrintUplinkMeasurement(printer *log.Logger, multiplicity int) error {
 
 	ulLoadedRTTDone := make(chan bool)
 
-	go func() {
-		time.Sleep(1000 * time.Millisecond)
-		ulLoadedRTTStats, _, ulLoadedRTTErr = MeasureRTT()
-		ulLoadedRTTDone <- true
-	}()
+	if measureLoadedRTT {
+		go func() {
+			time.Sleep(1000 * time.Millisecond)
+			ulLoadedRTTStats, _, ulLoadedRTTErr = MeasureRTT()
+			ulLoadedRTTDone <- true
+		}()
+	}
 
 	if multiplicity > 0 {
 		ulStats, ulSpeedError = MeasureUplinkMultiplexed(multiplicity)
@@ -140,7 +144,7 @@ func runAndPrintUplinkMeasurement(printer *log.Logger, multiplicity int) error {
 
 	printSpeedMeasurement(printer, "Uplink", ulStats)
 
-	if <-ulLoadedRTTDone && ulLoadedRTTErr == nil {
+	if measureLoadedRTT && <-ulLoadedRTTDone && ulLoadedRTTErr == nil {
 		printer.Println()
 		printRTTMeasurement(printer, "RTT-UplinkLoaded", ulLoadedRTTStats)
 	}
@@ -167,7 +171,7 @@ func SetTransportProtocol(protocol string, dialTimeout time.Duration) {
 	}
 }
 
-func RunAndPrint(printer *log.Logger, transportProtocol string, multiplicity int) error {
+func RunAndPrint(printer *log.Logger, transportProtocol string, multiplicity int, measureLoadedRTT bool) error {
 	SetTransportProtocol(transportProtocol, defaultDialTimeout)
 
 	if err := runAndPrintMeasurementMetadata(printer); err != nil {
@@ -180,12 +184,12 @@ func RunAndPrint(printer *log.Logger, transportProtocol string, multiplicity int
 	}
 	printer.Println()
 
-	if err := runAndPrintDownlinkMeasurement(printer, multiplicity); err != nil {
+	if err := runAndPrintDownlinkMeasurement(printer, multiplicity, measureLoadedRTT); err != nil {
 		return err
 	}
 	printer.Println()
 
-	if err := runAndPrintUplinkMeasurement(printer, multiplicity); err != nil {
+	if err := runAndPrintUplinkMeasurement(printer, multiplicity, measureLoadedRTT); err != nil {
 		return err
 	}
 

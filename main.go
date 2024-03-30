@@ -22,6 +22,7 @@ type CmdOpts struct {
 	testIP4      bool
 	testIP6      bool
 	multiplicity int
+	noLoadedRTT  bool
 }
 
 func printTimestamp() {
@@ -47,19 +48,19 @@ func main() {
 			// if none specified, pick up a transport protocol automatically and then exit
 			if !cmdOpts.testIP4 && !cmdOpts.testIP6 {
 				printTimestamp()
-				return cfspeed.RunAndPrint(printer, "tcp", cmdOpts.multiplicity)
+				return cfspeed.RunAndPrint(printer, "tcp", cmdOpts.multiplicity, !cmdOpts.noLoadedRTT)
 			}
 
 			// these options are not mutually exclusive
 			if cmdOpts.testIP4 {
 				printTimestamp()
-				if err := cfspeed.RunAndPrint(printer, "tcp4", cmdOpts.multiplicity); err != nil {
+				if err := cfspeed.RunAndPrint(printer, "tcp4", cmdOpts.multiplicity, !cmdOpts.noLoadedRTT); err != nil {
 					return err
 				}
 			}
 			if cmdOpts.testIP6 {
 				printTimestamp()
-				if err := cfspeed.RunAndPrint(printer, "tcp6", cmdOpts.multiplicity); err != nil {
+				if err := cfspeed.RunAndPrint(printer, "tcp6", cmdOpts.multiplicity, !cmdOpts.noLoadedRTT); err != nil {
 					return err
 				}
 			}
@@ -72,7 +73,8 @@ func main() {
 
 	flags.BoolVarP(&cmdOpts.testIP4, "ip4", "4", false, "ensure measurements over IPv4")
 	flags.BoolVarP(&cmdOpts.testIP6, "ip6", "6", false, "ensure measurements over IPv6")
-	flags.IntVarP(&cmdOpts.multiplicity, "multiplicity", "m", 1, "multiplicity of measurements, must be a positive integer")
+	flags.IntVarP(&cmdOpts.multiplicity, "multiplicity", "m", 1, "number of connections in parallel for speed measurements")
+	flags.BoolVarP(&cmdOpts.noLoadedRTT, "no-rtt-under-loads", "P", false, "do not measure RTT during speed measurements")
 
 	cmd.SetVersionTemplate(fmt.Sprintf("cfspeed %s (%s)\n", BuildName, BuildAnnotation))
 
