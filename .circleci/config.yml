@@ -20,8 +20,8 @@ executors:
     shell: powershell.exe
   macos:
     macos:
-      xcode: 13.3.0
-    resource_class: macos.x86.medium.gen2
+      xcode: 15.3.0
+    resource_class: macos.m1.medium.gen1
 
 jobs:
   determine-build-name:
@@ -171,13 +171,13 @@ workflows:
             $BuildName = $(& bash -c '. BUILD_NAME; printenv BUILD_NAME')
             Expand-Archive "cfspeed-${BuildName}-windows-amd64.zip" .
       - smoke-test-unified:
-          name: smoke-test-darwin-amd64
+          name: smoke-test-darwin-arm64
           requires:
-            - build-darwin-amd64
+            - build-darwin-arm64
           executor: macos
           extract-cmd: |
             . BUILD_NAME
-            unzip "cfspeed-${BUILD_NAME}-darwin-amd64.zip"
+            unzip "cfspeed-${BUILD_NAME}-darwin-arm64.zip"
 
       - release:
           requires:
@@ -186,7 +186,7 @@ workflows:
             - smoke-test-linux-amd64
             - smoke-test-linux-arm64
             - smoke-test-windows-amd64
-            - smoke-test-darwin-amd64
+            - smoke-test-darwin-arm64
           context:
             - github
           filters:
