@@ -5,17 +5,17 @@ executors:
     docker:
       - image: golang:1.22
     resource_class: medium
-  ubuntu-docker:
+  ubuntu-docker-amd64:
     docker:
       - image: ubuntu:rolling
     resource_class: medium
-  ubuntu-machine-aarch64:
-    machine:
-      image: ubuntu-2004:current
+  ubuntu-docker-aarch64:
+    docker:
+      - image: ubuntu:rolling
     resource_class: arm.medium
   windows:
     machine:
-      image: windows-server-2019-vs2019:stable
+      image: windows-server-2022-gui:current
     resource_class: windows.medium
     shell: powershell.exe
   macos:
@@ -25,7 +25,7 @@ executors:
 
 jobs:
   determine-build-name:
-    executor: ubuntu-docker
+    executor: ubuntu-docker-amd64
     steps:
       - run:
           name: Determine build name
@@ -101,7 +101,7 @@ jobs:
           command: ./cfspeed -m 8
 
   release:
-    executor: ubuntu-docker
+    executor: ubuntu-docker-amd64
     steps:
       - run:
           name: Install dependencies
@@ -147,7 +147,7 @@ workflows:
           name: smoke-test-linux-amd64
           requires:
             - build-linux-amd64
-          executor: ubuntu-docker
+          executor: ubuntu-docker-amd64
           extract-cmd: |
             apt update
             apt install -y ca-certificates
@@ -157,8 +157,10 @@ workflows:
           name: smoke-test-linux-arm64
           requires:
             - build-linux-arm64
-          executor: ubuntu-machine-aarch64
+          executor: ubuntu-docker-aarch64
           extract-cmd: |
+            apt update
+            apt install -y ca-certificates
             . BUILD_NAME
             tar -xf "cfspeed-${BUILD_NAME}-linux-arm64.tar.gz"
       - smoke-test-unified:
