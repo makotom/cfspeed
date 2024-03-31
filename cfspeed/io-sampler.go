@@ -5,7 +5,10 @@ import (
 	"time"
 )
 
-const nIOEventsMin = 4
+const (
+	IOModeRead  = "read"
+	IOModeWrite = "write"
+)
 
 type IOEvent struct {
 	Timestamp time.Time
@@ -14,76 +17,66 @@ type IOEvent struct {
 }
 
 type IOSampler struct {
-	Mode       string
-	CallEvents []*IOEvent
+	SizeRead    int64
+	SizeWritten int64
+	Events      []*IOEvent
 }
 
-type ReadSampler struct {
+type SamplingReaderWriter struct {
 	IOSampler
-
-	ctr  int64
-	cEOF int64
+	Quota    int64
+	GoodThru time.Time
 }
 
-type WriteSampler struct {
-	IOSampler
-}
-
-func (r *ReadSampler) Read(p []byte) (int, error) {
+func (r *SamplingReaderWriter) Read(p []byte) (int, error) {
 	var err error = nil
 
 	size := len(p)
-	size64 := int64(size)
-	if size64 > r.cEOF/nIOEventsMin {
-		size64 = r.cEOF / nIOEventsMin
-		size = int(size64)
-	}
-
-	r.ctr += size64
-
-	if r.ctr >= r.cEOF {
-		size = int(size64 - (r.ctr - r.cEOF))
+	if r.SizeRead+int64(size) > r.Quota {
+		size = int(r.Quota - r.SizeRead)
 		err = io.EOF
-		r.ctr = r.cEOF
+	}
+	if time.Since(r.GoodThru) > 0 {
+		size = 0
+		err = io.EOF
 	}
 
-	r.IOSampler.CallEvents = append(r.IOSampler.CallEvents, &IOEvent{
+	r.Events = append(r.Events, &IOEvent{
 		Timestamp: time.Now(),
-		Mode:      "read",
+		Mode:      IOModeRead,
 		Size:      size,
 	})
+	r.SizeRead += int64(size)
 
 	return size, err
 }
 
-func (w *WriteSampler) Write(p []byte) (int, error) {
+func (w *SamplingReaderWriter) Write(p []byte) (int, error) {
 	size := len(p)
 
-	w.IOSampler.CallEvents = append(w.IOSampler.CallEvents, &IOEvent{
+	w.Events = append(w.Events, &IOEvent{
 		Timestamp: time.Now(),
-		Mode:      "write",
+		Mode:      IOModeWrite,
 		Size:      size,
 	})
+	w.SizeWritten = int64(size)
 
-	return size, nil
+	var err error = nil
+	if w.SizeWritten > w.Quota || time.Since(w.GoodThru) > 0 {
+		err = io.EOF
+	}
+
+	return size, err
 }
 
-func InitReadSampler(size int64) *ReadSampler {
-	r := &ReadSampler{}
+func InitSamplingReaderWriter(quota int64, goodThru time.Time) *SamplingReaderWriter {
+	s := &SamplingReaderWriter{}
 
-	r.IOSampler.Mode = "read"
-	r.IOSampler.CallEvents = []*IOEvent{}
-	r.ctr = 0
-	r.cEOF = size
+	s.SizeRead = 0
+	s.SizeWritten = 0
+	s.Events = []*IOEvent{}
+	s.Quota = quota
+	s.GoodThru = goodThru
 
-	return r
-}
-
-func InitWriteSampler() *WriteSampler {
-	w := &WriteSampler{}
-
-	w.IOSampler.Mode = "write"
-	w.IOSampler.CallEvents = []*IOEvent{}
-
-	return w
+	return s
 }

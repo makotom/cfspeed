@@ -3,34 +3,34 @@ version: 2.1
 executors:
   go:
     docker:
-      - image: golang:1.18
+      - image: golang:1.22
     resource_class: medium
-  ubuntu-docker:
+  ubuntu-docker-amd64:
     docker:
       - image: ubuntu:rolling
     resource_class: medium
-  ubuntu-machine-aarch64:
-    machine:
-      image: ubuntu-2004:current
+  ubuntu-docker-aarch64:
+    docker:
+      - image: ubuntu:rolling
     resource_class: arm.medium
   windows:
     machine:
-      image: windows-server-2019-vs2019:stable
+      image: windows-server-2022-gui:current
     resource_class: windows.medium
     shell: powershell.exe
   macos:
     macos:
-      xcode: 13.3.0
-    resource_class: macos.x86.medium.gen2
+      xcode: 15.3.0
+    resource_class: macos.m1.medium.gen1
 
 jobs:
   determine-build-name:
-    executor: ubuntu-docker
+    executor: ubuntu-docker-amd64
     steps:
       - run:
           name: Determine build name
           command: |
-            echo "export BUILD_NAME='0.1.${CIRCLE_BUILD_NUM}-${CIRCLE_SHA1:0:7}'" | tee -a BUILD_NAME
+            echo "export BUILD_NAME='0.2.${CIRCLE_BUILD_NUM}-${CIRCLE_SHA1:0:7}'" | tee -a BUILD_NAME
       - persist_to_workspace:
           root: .
           paths:
@@ -97,11 +97,11 @@ jobs:
           name: Show help message
           command: ./cfspeed --help
       - run:
-          name: Run a normal test
-          command: ./cfspeed
+          name: Run with multiplicity at 8
+          command: ./cfspeed -m 8
 
   release:
-    executor: ubuntu-docker
+    executor: ubuntu-docker-amd64
     steps:
       - run:
           name: Install dependencies
@@ -147,7 +147,7 @@ workflows:
           name: smoke-test-linux-amd64
           requires:
             - build-linux-amd64
-          executor: ubuntu-docker
+          executor: ubuntu-docker-amd64
           extract-cmd: |
             apt update
             apt install -y ca-certificates
@@ -157,8 +157,10 @@ workflows:
           name: smoke-test-linux-arm64
           requires:
             - build-linux-arm64
-          executor: ubuntu-machine-aarch64
+          executor: ubuntu-docker-aarch64
           extract-cmd: |
+            apt update
+            apt install -y ca-certificates
             . BUILD_NAME
             tar -xf "cfspeed-${BUILD_NAME}-linux-arm64.tar.gz"
       - smoke-test-unified:
@@ -171,13 +173,13 @@ workflows:
             $BuildName = $(& bash -c '. BUILD_NAME; printenv BUILD_NAME')
             Expand-Archive "cfspeed-${BuildName}-windows-amd64.zip" .
       - smoke-test-unified:
-          name: smoke-test-darwin-amd64
+          name: smoke-test-darwin-arm64
           requires:
-            - build-darwin-amd64
+            - build-darwin-arm64
           executor: macos
           extract-cmd: |
             . BUILD_NAME
-            unzip "cfspeed-${BUILD_NAME}-darwin-amd64.zip"
+            unzip "cfspeed-${BUILD_NAME}-darwin-arm64.zip"
 
       - release:
           requires:
@@ -186,7 +188,7 @@ workflows:
             - smoke-test-linux-amd64
             - smoke-test-linux-arm64
             - smoke-test-windows-amd64
-            - smoke-test-darwin-amd64
+            - smoke-test-darwin-arm64
           context:
             - github
           filters:

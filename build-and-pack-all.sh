@@ -24,7 +24,7 @@ build_gc() {
         OUTPUT="$(pwd)/dist/${goos}/${goarch}/cfspeed.exe"
     fi
 
-    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "${OUTPUT}" .
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 go build -buildvcs=false -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "${OUTPUT}" .
 }
 
 build_android() {
@@ -32,10 +32,10 @@ build_android() {
     goarch=$2
 
     # https://developer.android.com/ndk/downloads
-    ndk_label="android-ndk-r23b"
+    ndk_label="android-ndk-r26c"
     ndk_archive="${ndk_label}-linux.zip"
-    ndk_checksum="f47ec4c4badd11e9f593a8450180884a927c330d"
-    ndk_android_version="android31"
+    ndk_checksum="7faebe2ebd3590518f326c82992603170f07c96e"
+    ndk_android_version="android34"
 
     if [[ ! -d "${ndk_label}" ]]; then
         curl -fJOL "https://dl.google.com/android/repository/${ndk_archive}"
@@ -51,7 +51,7 @@ build_android() {
 
     CC="$(pwd)/${ndk_label}/toolchains/llvm/prebuilt/linux-x86_64/bin/${arch_clang}-linux-${ndk_android_version}-clang" \
     CXX="$(pwd)/${ndk_label}/toolchains/llvm/prebuilt/linux-x86_64/bin/${arch_clang}-linux-${ndk_android_version}-clang++" \
-    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=1 go build -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "dist/${goos}/${goarch}/cfspeed" .
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=1 go build -buildvcs=false -ldflags "-X ${BUILD_NAME_VAR_PACKAGE}.BuildName=${BUILD_NAME} -X ${BUILD_NAME_VAR_PACKAGE}.BuildAnnotation=${BUILD_ANNOTATION}" -o "dist/${goos}/${goarch}/cfspeed" .
 }
 
 package() {
