@@ -186,7 +186,11 @@ func getIOReadMBPSSamples(_, end time.Time, cfReqDur time.Duration, ioEvents []*
 		sizeSum += ioEventsToAnalyse[index].Size
 
 		sinceStart := event.Timestamp.Sub(windowStart)
-		if (float64(event.Timestamp.Sub(ioEventsToAnalyse[index].Timestamp).Milliseconds()) > inferredUnbufferedIOThreshold && sinceStart > ioSamplingWindowWidthMin) || index == lastIndexForFor {
+		if index == lastIndexForFor ||
+			(float64(event.Timestamp.Sub(ioEventsToAnalyse[index].Timestamp).Milliseconds()) > inferredUnbufferedIOThreshold &&
+				sinceStart > ioSamplingWindowWidthMin &&
+				// this line implicitly expect short circuits, i.e., herein index != lastIndexForFor and (index+2) is still in the range of ioEventsToAnalyse
+				ioEventsToAnalyse[index+2].Timestamp.Sub(event.Timestamp) > 0) {
 			mbpsSamples = append(mbpsSamples, &Sample[float64]{
 				Value:     float64(8*sizeSum) / float64(sinceStart.Microseconds()),
 				Timestamp: event.Timestamp,
@@ -223,7 +227,11 @@ func getIOWriteMBPSSamples(start, _ time.Time, cfReqDur time.Duration, ioEvents 
 		sizeSum += ioEventsToAnalyse[index].Size
 
 		sinceStart := windowStart.Sub(event.Timestamp)
-		if (float64(ioEventsToAnalyse[index].Timestamp.Sub(event.Timestamp).Milliseconds()) > inferredUnbufferedIOThreshold && sinceStart > ioSamplingWindowWidthMin) || index == lastIndexForFor {
+		if index == lastIndexForFor ||
+			(float64(ioEventsToAnalyse[index].Timestamp.Sub(event.Timestamp).Milliseconds()) > inferredUnbufferedIOThreshold &&
+				sinceStart > ioSamplingWindowWidthMin &&
+				// this line implicitly expect short circuits, i.e., herein index != lastIndexForFor and (index+2) is still in the range of ioEventsToAnalyse
+				event.Timestamp.Sub(ioEventsToAnalyse[index+2].Timestamp) > 0) {
 			mbpsSamples = append(mbpsSamples, &Sample[float64]{
 				Value:     float64(8*sizeSum) / float64(sinceStart.Microseconds()),
 				Timestamp: windowStart,
@@ -286,6 +294,12 @@ func consolidateGroupedMBPSSamples(groupedMBPSSamples [][]*Sample[float64]) []*S
 
 		youngestSample := groupedMBPSSamples[youngestGroup][curGroupHead[youngestGroup]]
 		curGroupMBPS[youngestGroup] = youngestSample.Value
+
+		// If the previous Mbps sample is time-wise coincident with the current Mbps sample
+		// trim the previous sample to overwrite with the current one
+		if previousIndex := len(mergedMBPSSamples) - 1; previousIndex > -1 && mergedMBPSSamples[previousIndex].Timestamp == youngestSample.Timestamp {
+			mergedMBPSSamples = mergedMBPSSamples[:previousIndex]
+		}
 
 		// Add the sample if and only if there is one or more active groups
 		if curSummedMBPS := sumF64s(curGroupMBPS); curSummedMBPS > 0 {

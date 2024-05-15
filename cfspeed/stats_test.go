@@ -176,6 +176,7 @@ func TestAnalyseMeasurements_DLWithoutZeroPoint(t *testing.T) {
 
 	mbpsSamples, sizeSum, durationSum := analyseMeasurements(dummyMeasurements, false)
 
+	assert.Equal(t, len(mbpsSamples), 4)
 	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
 		Value:     320,
 		Timestamp: dummyFirstStart.Add(dummyIOEventsAfter[1]),
@@ -245,6 +246,7 @@ func TestAnalyseMeasurements_DLWithZeroPoint(t *testing.T) {
 
 	mbpsSamples, sizeSum, durationSum := analyseMeasurements(dummyMeasurements, true)
 
+	assert.Equal(t, len(mbpsSamples), 6)
 	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
 		Value:     0,
 		Timestamp: dummyFirstStart.Add(dummyCFReqDur),
@@ -272,6 +274,51 @@ func TestAnalyseMeasurements_DLWithZeroPoint(t *testing.T) {
 
 	assert.Equal(t, sizeSum, 2*dummyMeasurementSize)
 	assert.Equal(t, time.Duration(durationSum)*time.Microsecond, 2*dummyDuration)
+}
+
+func TestAnalyseMeasurements_DLWithCoincidentEvents(t *testing.T) {
+	dummyMeasurementSize := int64(50 * 1000 * 1000) // 400 MBit
+	dummyIOSizes := []int{
+		0,
+		20 * 1000 * 1000, // 160 Mbit
+		30 * 1000 * 1000, // 240 MBit
+	}
+
+	dummyCFReqDur := 20 * time.Millisecond
+	dummyDuration := 1000*time.Millisecond + dummyCFReqDur
+	dummyIOEventsAfter := []time.Duration{
+		dummyCFReqDur,
+		dummyDuration,
+		dummyDuration,
+	}
+
+	dummyStart := time.Now()
+
+	dummyMeasurements := []*SpeedMeasurement{
+		{
+			Direction: DirectionDownlink,
+			Size:      dummyMeasurementSize,
+			Start:     dummyStart,
+			End:       dummyStart.Add(dummyDuration),
+			Duration:  dummyDuration,
+			IOSampler: IOSampler{
+				SizeWritten: dummyMeasurementSize,
+				Events:      generateDummyIOEvents(IOModeWrite, dummyStart, dummyIOEventsAfter, dummyIOSizes),
+			},
+			CFReqDur: dummyCFReqDur,
+		},
+	}
+
+	mbpsSamples, sizeSum, durationSum := analyseMeasurements(dummyMeasurements, false)
+
+	assert.Equal(t, len(mbpsSamples), 1)
+	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
+		Value:     400,
+		Timestamp: dummyStart.Add(dummyDuration),
+	})
+
+	assert.Equal(t, sizeSum, dummyMeasurementSize)
+	assert.Equal(t, time.Duration(durationSum)*time.Microsecond, dummyDuration)
 }
 
 func TestAnalyseMeasurements_ULWithoutZeroPoint(t *testing.T) {
@@ -322,6 +369,7 @@ func TestAnalyseMeasurements_ULWithoutZeroPoint(t *testing.T) {
 
 	mbpsSamples, sizeSum, durationSum := analyseMeasurements(dummyMeasurements, false)
 
+	assert.Equal(t, len(mbpsSamples), 4)
 	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
 		Value:     400,
 		Timestamp: dummyFirstStart.Add(dummyIOEventsAfter[2]),
@@ -391,6 +439,7 @@ func TestAnalyseMeasurements_ULWithZeroPoint(t *testing.T) {
 
 	mbpsSamples, sizeSum, durationSum := analyseMeasurements(dummyMeasurements, true)
 
+	assert.Equal(t, len(mbpsSamples), 6)
 	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
 		Value:     0,
 		Timestamp: dummyFirstStart,
@@ -418,6 +467,51 @@ func TestAnalyseMeasurements_ULWithZeroPoint(t *testing.T) {
 
 	assert.Equal(t, sizeSum, 2*dummyMeasurementSize)
 	assert.Equal(t, time.Duration(durationSum)*time.Microsecond, 2*dummyDuration)
+}
+
+func TestAnalyseMeasurements_ULWithCoincidentEvents(t *testing.T) {
+	dummyMeasurementSize := int64(50 * 1000 * 1000) // 400 MBit
+	dummyIOSizes := []int{
+		20 * 1000 * 1000, // 160 Mbit
+		30 * 1000 * 1000, // 240 MBit
+		0,
+	}
+
+	dummyCFReqDur := 20 * time.Millisecond
+	dummyDuration := 1000*time.Millisecond + dummyCFReqDur
+	dummyIOEventsAfter := []time.Duration{
+		0,
+		0,
+		dummyDuration - dummyCFReqDur,
+	}
+
+	dummyStart := time.Now()
+
+	dummyMeasurements := []*SpeedMeasurement{
+		{
+			Direction: DirectionUplink,
+			Size:      dummyMeasurementSize,
+			Start:     dummyStart,
+			End:       dummyStart.Add(dummyDuration),
+			Duration:  dummyDuration,
+			IOSampler: IOSampler{
+				SizeWritten: dummyMeasurementSize,
+				Events:      generateDummyIOEvents(IOModeRead, dummyStart, dummyIOEventsAfter, dummyIOSizes),
+			},
+			CFReqDur: dummyCFReqDur,
+		},
+	}
+
+	mbpsSamples, sizeSum, durationSum := analyseMeasurements(dummyMeasurements, false)
+
+	assert.Equal(t, len(mbpsSamples), 1)
+	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
+		Value:     400,
+		Timestamp: dummyStart.Add(dummyDuration - dummyCFReqDur),
+	})
+
+	assert.Equal(t, sizeSum, dummyMeasurementSize)
+	assert.Equal(t, time.Duration(durationSum)*time.Microsecond, dummyDuration)
 }
 
 func TestAnalyseMeasurementGroups(t *testing.T) {
@@ -491,6 +585,7 @@ func TestAnalyseMeasurementGroups(t *testing.T) {
 
 	mbpsSamples, sizeSum, longestSpan := analyseMeasurementGroups(dummyMeasurementGroups)
 
+	assert.Equal(t, len(mbpsSamples), 8)
 	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
 		Value:     320 + 0 + 0,
 		Timestamp: dummyStartTimestamps[1].Add(dummyCFReqDur),
@@ -526,4 +621,49 @@ func TestAnalyseMeasurementGroups(t *testing.T) {
 
 	assert.Equal(t, sizeSum, 3*dummyMeasurementSize)
 	assert.Equal(t, time.Duration(longestSpan)*time.Microsecond, (dummyDuration + time.Duration(2*dummyStartDriftMS)*time.Millisecond))
+}
+
+func TestAnalyseMeasurementGroups_WithCoincidentMeasurements(t *testing.T) {
+	dummyMeasurementSize := int64(50 * 1000 * 1000) // 400 MBit
+	dummyIOSizes := []int{
+		0,
+		0,
+		50 * 1000 * 1000, // 400 Mbit, 400 Mbps
+	}
+
+	dummyCFReqDur := 20 * time.Millisecond
+	dummyDuration := 1000*time.Millisecond + dummyCFReqDur
+	dummyIOEventsAfter := []time.Duration{
+		dummyCFReqDur,
+		500*time.Millisecond + dummyCFReqDur,
+		dummyDuration,
+	}
+
+	dummyCoincidentStart := time.Now()
+
+	dummyCoincidentMeasurement := SpeedMeasurement{
+		Direction: DirectionDownlink,
+		Size:      dummyMeasurementSize,
+		Start:     dummyCoincidentStart,
+		End:       dummyCoincidentStart.Add(dummyDuration),
+		Duration:  dummyDuration,
+		IOSampler: IOSampler{
+			SizeWritten: dummyMeasurementSize,
+			Events:      generateDummyIOEvents(IOModeWrite, dummyCoincidentStart, dummyIOEventsAfter, dummyIOSizes),
+		},
+		CFReqDur: dummyCFReqDur,
+	}
+
+	dummyMeasurementGroups := [][]*SpeedMeasurement{{&dummyCoincidentMeasurement}, {&dummyCoincidentMeasurement}}
+
+	mbpsSamples, sizeSum, longestSpan := analyseMeasurementGroups(dummyMeasurementGroups)
+
+	assert.Equal(t, len(mbpsSamples), 1)
+	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
+		Value:     2 * 400,
+		Timestamp: dummyCoincidentStart.Add(dummyIOEventsAfter[2]),
+	})
+
+	assert.Equal(t, sizeSum, 2*dummyMeasurementSize)
+	assert.Equal(t, time.Duration(longestSpan)*time.Microsecond, dummyDuration)
 }
