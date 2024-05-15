@@ -176,6 +176,7 @@ func TestAnalyseMeasurements_DLWithoutZeroPoint(t *testing.T) {
 
 	mbpsSamples, sizeSum, durationSum := analyseMeasurements(dummyMeasurements, false)
 
+	assert.Equal(t, len(mbpsSamples), 4)
 	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
 		Value:     320,
 		Timestamp: dummyFirstStart.Add(dummyIOEventsAfter[1]),
@@ -245,6 +246,7 @@ func TestAnalyseMeasurements_DLWithZeroPoint(t *testing.T) {
 
 	mbpsSamples, sizeSum, durationSum := analyseMeasurements(dummyMeasurements, true)
 
+	assert.Equal(t, len(mbpsSamples), 6)
 	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
 		Value:     0,
 		Timestamp: dummyFirstStart.Add(dummyCFReqDur),
@@ -367,6 +369,7 @@ func TestAnalyseMeasurements_ULWithoutZeroPoint(t *testing.T) {
 
 	mbpsSamples, sizeSum, durationSum := analyseMeasurements(dummyMeasurements, false)
 
+	assert.Equal(t, len(mbpsSamples), 4)
 	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
 		Value:     400,
 		Timestamp: dummyFirstStart.Add(dummyIOEventsAfter[2]),
@@ -436,6 +439,7 @@ func TestAnalyseMeasurements_ULWithZeroPoint(t *testing.T) {
 
 	mbpsSamples, sizeSum, durationSum := analyseMeasurements(dummyMeasurements, true)
 
+	assert.Equal(t, len(mbpsSamples), 6)
 	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
 		Value:     0,
 		Timestamp: dummyFirstStart,
@@ -581,6 +585,7 @@ func TestAnalyseMeasurementGroups(t *testing.T) {
 
 	mbpsSamples, sizeSum, longestSpan := analyseMeasurementGroups(dummyMeasurementGroups)
 
+	assert.Equal(t, len(mbpsSamples), 8)
 	assert.DeepEqual(t, *mbpsSamples[0], Sample[float64]{
 		Value:     320 + 0 + 0,
 		Timestamp: dummyStartTimestamps[1].Add(dummyCFReqDur),
