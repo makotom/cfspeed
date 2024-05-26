@@ -16,10 +16,11 @@ const (
 	downURLTemplate = "https://speed.cloudflare.com/__down?bytes=%d"
 	upURLTemplate   = "https://speed.cloudflare.com/__up"
 
-	rttMeasurementDuration   = 2 * time.Second   // Measurement resumes by sending another ping until exceeding this time duration
-	speedMeasurementDuration = 10 * time.Second  // Download / Upload continues until exceeding this time duration
-	downloadSizeMax          = 512 * 1024 * 1024 // Maximum size of data to be downloaded; 512 MiB
-	uploadSizeMax            = 512 * 1024 * 1024 // Maximum size of data to be uploaded; 512 MiB
+	rttMeasurementDurationMax = 2 * time.Second   // Maximum duration of RTT measurement
+	rttMeasurementMax         = 20                // Maximum number of pings to be made for RTT measurement
+	speedMeasurementDuration  = 10 * time.Second  // Download / Upload continues until exceeding this time duration
+	downloadSizeMax           = 512 * 1024 * 1024 // Maximum size of data to be downloaded; 512 MiB
+	uploadSizeMax             = 512 * 1024 * 1024 // Maximum size of data to be uploaded; 512 MiB
 )
 
 type MeasurementMetadata struct {
@@ -234,7 +235,7 @@ func MeasureRTT() (*Stats, *Stats, error) {
 	durations := []time.Duration{}
 	cfReqDurs := []time.Duration{}
 
-	for measureUntil := time.Now().Add(rttMeasurementDuration); time.Since(measureUntil) < 0; {
+	for measureUntil := time.Now().Add(rttMeasurementDurationMax); time.Since(measureUntil) < 0 && len(durations) < rttMeasurementMax; {
 		measurement, err := doUplinkMeasurement(0, time.Now())
 		if err != nil {
 			return nil, nil, err
