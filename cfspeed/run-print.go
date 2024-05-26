@@ -13,6 +13,7 @@ import (
 
 const (
 	defaultDialTimeout = 10 * time.Second
+	defaultRunTimeout  = 30 * time.Second
 )
 
 func printMetadata(printer *log.Logger, metadata *MeasurementMetadata) {
@@ -70,6 +71,26 @@ func runAndPrintMeasurementMetadata(printer *log.Logger) error {
 	return nil
 }
 
+func runAndPrintMeasurementMetadataWithTimeout(printer *log.Logger, timeout time.Duration) error {
+	var err error = nil
+	completed := make(chan bool)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	go func() {
+		err = runAndPrintMeasurementMetadata(printer)
+		completed <- true
+	}()
+
+	select {
+	case <-completed:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func runAndPrintUnloadedRTTMeasurement(printer *log.Logger) error {
 	rttStats, _, err := MeasureRTT()
 
@@ -80,6 +101,26 @@ func runAndPrintUnloadedRTTMeasurement(printer *log.Logger) error {
 	printRTTMeasurement(printer, "RTT-Unloaded", rttStats)
 
 	return nil
+}
+
+func runAndPrintUnloadedRTTMeasurementWithTimeout(printer *log.Logger, timeout time.Duration) error {
+	var err error = nil
+	completed := make(chan bool)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	go func() {
+		err = runAndPrintUnloadedRTTMeasurement(printer)
+		completed <- true
+	}()
+
+	select {
+	case <-completed:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func runAndPrintDownlinkMeasurement(printer *log.Logger, multiplicity int, measureLoadedRTT bool) error {
@@ -117,6 +158,26 @@ func runAndPrintDownlinkMeasurement(printer *log.Logger, multiplicity int, measu
 	return nil
 }
 
+func runAndPrintDownlinkMeasurementWithTimeout(printer *log.Logger, multiplicity int, measureLoadedRTT bool, timeout time.Duration) error {
+	var err error = nil
+	completed := make(chan bool)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	go func() {
+		err = runAndPrintDownlinkMeasurement(printer, multiplicity, measureLoadedRTT)
+		completed <- true
+	}()
+
+	select {
+	case <-completed:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func runAndPrintUplinkMeasurement(printer *log.Logger, multiplicity int, measureLoadedRTT bool) error {
 	var ulStats *SpeedMeasurementStats
 	var ulLoadedRTTStats *Stats
@@ -152,6 +213,26 @@ func runAndPrintUplinkMeasurement(printer *log.Logger, multiplicity int, measure
 	return nil
 }
 
+func runAndPrintUplinkMeasurementWithTimeout(printer *log.Logger, multiplicity int, measureLoadedRTT bool, timeout time.Duration) error {
+	var err error = nil
+	completed := make(chan bool)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	go func() {
+		err = runAndPrintUplinkMeasurement(printer, multiplicity, measureLoadedRTT)
+		completed <- true
+	}()
+
+	select {
+	case <-completed:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func SetTransportProtocol(protocol string, dialTimeout time.Duration) {
 	// cf. https://go.googlesource.com/go/+/refs/tags/go1.22.1/src/net/http/transport.go#43
 	// cf. https://go.googlesource.com/go/+/refs/tags/go1.22.1/src/net/http/transport.go#140
@@ -174,24 +255,24 @@ func SetTransportProtocol(protocol string, dialTimeout time.Duration) {
 func RunAndPrint(printer *log.Logger, transportProtocol string, multiplicity int, measureRTT bool) error {
 	SetTransportProtocol(transportProtocol, defaultDialTimeout)
 
-	if err := runAndPrintMeasurementMetadata(printer); err != nil {
+	if err := runAndPrintMeasurementMetadataWithTimeout(printer, defaultRunTimeout); err != nil {
 		return err
 	}
 	printer.Println()
 
 	if measureRTT {
-		if err := runAndPrintUnloadedRTTMeasurement(printer); err != nil {
+		if err := runAndPrintUnloadedRTTMeasurementWithTimeout(printer, defaultRunTimeout); err != nil {
 			return err
 		}
 		printer.Println()
 	}
 
-	if err := runAndPrintDownlinkMeasurement(printer, multiplicity, measureRTT); err != nil {
+	if err := runAndPrintDownlinkMeasurementWithTimeout(printer, multiplicity, measureRTT, defaultRunTimeout); err != nil {
 		return err
 	}
 	printer.Println()
 
-	if err := runAndPrintUplinkMeasurement(printer, multiplicity, measureRTT); err != nil {
+	if err := runAndPrintUplinkMeasurementWithTimeout(printer, multiplicity, measureRTT, defaultRunTimeout); err != nil {
 		return err
 	}
 
