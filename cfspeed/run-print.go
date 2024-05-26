@@ -171,7 +171,7 @@ func SetTransportProtocol(protocol string, dialTimeout time.Duration) {
 	}
 }
 
-func RunAndPrint(printer *log.Logger, transportProtocol string, multiplicity int, measureLoadedRTT bool) error {
+func RunAndPrint(printer *log.Logger, transportProtocol string, multiplicity int, measureRTT bool) error {
 	SetTransportProtocol(transportProtocol, defaultDialTimeout)
 
 	if err := runAndPrintMeasurementMetadata(printer); err != nil {
@@ -179,17 +179,19 @@ func RunAndPrint(printer *log.Logger, transportProtocol string, multiplicity int
 	}
 	printer.Println()
 
-	if err := runAndPrintUnloadedRTTMeasurement(printer); err != nil {
+	if measureRTT {
+		if err := runAndPrintUnloadedRTTMeasurement(printer); err != nil {
+			return err
+		}
+		printer.Println()
+	}
+
+	if err := runAndPrintDownlinkMeasurement(printer, multiplicity, measureRTT); err != nil {
 		return err
 	}
 	printer.Println()
 
-	if err := runAndPrintDownlinkMeasurement(printer, multiplicity, measureLoadedRTT); err != nil {
-		return err
-	}
-	printer.Println()
-
-	if err := runAndPrintUplinkMeasurement(printer, multiplicity, measureLoadedRTT); err != nil {
+	if err := runAndPrintUplinkMeasurement(printer, multiplicity, measureRTT); err != nil {
 		return err
 	}
 
