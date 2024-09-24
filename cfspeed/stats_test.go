@@ -667,3 +667,13 @@ func TestAnalyseMeasurementGroups_WithCoincidentMeasurements(t *testing.T) {
 	assert.Equal(t, sizeSum, 2*dummyMeasurementSize)
 	assert.Equal(t, time.Duration(longestSpan)*time.Microsecond, dummyDuration)
 }
+
+func TestAnalyseMeasurementGroups_WithZeroLengthMeasurements(t *testing.T) {
+	dummyMeasurementGroups := [][]*SpeedMeasurement{{}, {}}
+
+	mbpsSamples, sizeSum, longestSpan := analyseMeasurementGroups(dummyMeasurementGroups)
+
+	assert.Equal(t, len(mbpsSamples), 0)
+	assert.Equal(t, sizeSum, int64(0))
+	assert.Equal(t, time.Duration(longestSpan)*time.Microsecond, 0*time.Microsecond)
+}
