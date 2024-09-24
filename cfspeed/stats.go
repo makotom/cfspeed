@@ -350,24 +350,30 @@ func analyseMeasurements(measurements []*SpeedMeasurement, injectZeroPointSample
 func analyseMeasurementGroups(measurementGroups [][]*SpeedMeasurement) ([]*Sample[float64], int64, int64) {
 	sizeSum := int64(0)
 
-	groupedMBPSSamples := make([][]*Sample[float64], len(measurementGroups))
+	groupedMBPSSamples := [][]*Sample[float64]{}
 	firstStart := time.Unix(1<<62-1, 1<<62-1)
 	lastEnd := time.Time{}
 
-	for index, measurements := range measurementGroups {
-		groupMBPSSamples, groupSizeSum, _ := analyseMeasurements(measurements, true)
-		groupedMBPSSamples[index] = groupMBPSSamples
-		sizeSum += groupSizeSum
+	for _, measurements := range measurementGroups {
+		if len(measurements) > 0 {
+			groupMBPSSamples, groupSizeSum, _ := analyseMeasurements(measurements, true)
+			groupedMBPSSamples = append(groupedMBPSSamples, groupMBPSSamples)
+			sizeSum += groupSizeSum
 
-		firstMeasurement := measurements[0]
-		if firstMeasurement.Start.Compare(firstStart) < 0 {
-			firstStart = firstMeasurement.Start
-		}
+			firstMeasurement := measurements[0]
+			if firstMeasurement.Start.Compare(firstStart) < 0 {
+				firstStart = firstMeasurement.Start
+			}
 
-		lastMeasurement := measurements[len(measurements)-1]
-		if lastMeasurement.End.Compare(lastEnd) > 0 {
-			lastEnd = lastMeasurement.End
+			lastMeasurement := measurements[len(measurements)-1]
+			if lastMeasurement.End.Compare(lastEnd) > 0 {
+				lastEnd = lastMeasurement.End
+			}
 		}
+	}
+
+	if len(groupedMBPSSamples) == 0 {
+		firstStart = lastEnd
 	}
 
 	return consolidateGroupedMBPSSamples(groupedMBPSSamples), sizeSum, lastEnd.Sub(firstStart).Microseconds()
